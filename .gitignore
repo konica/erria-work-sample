@@ -1,8 +1,6 @@
 .sandbox
 .extract-design-system
-design-system
-.brainstorm\mockup
-docs
+brainstorm/backup/
 .claude
 .agents
 ideation
