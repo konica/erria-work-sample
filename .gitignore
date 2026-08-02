@@ -1,0 +1,11 @@
+.sandbox
+.extract-design-system
+design-system
+.brainstorm\mockup
+docs
+.claude
+.agents
+ideation
+agentic-sdlc-agent-mapping.md
+image.png
+brainstorm/mockup/*.zip
