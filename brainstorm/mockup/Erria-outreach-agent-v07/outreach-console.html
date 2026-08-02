@@ -492,6 +492,35 @@ kbd { font-family: var(--mono); font-size: 10.5px; font-weight: 600; background:
 .repeat-link select { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--fg); background: var(--panel); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 8px 11px; min-width: 250px; }
 .repeat-link .rl-preview { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--fg); margin-top: 11px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .repeat-link .rl-preview svg { color: var(--brand); flex: 0 0 auto; margin-top: 1px; }
+
+/* ---- manual tier override ---- */
+.detail-tier { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex: 0 0 auto; }
+.tier-change-link { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--brand-strong); font-size: 12px; font-weight: 600; padding: 0; }
+.tier-change-link svg { width: 13px; height: 13px; }
+.tier-change-link:hover { text-decoration: underline; }
+.tier-panel-inline { border: 1px solid var(--brand); background: var(--brand-tint); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 22px; box-shadow: var(--shadow-card); animation: rise .18s ease; }
+.tier-panel-inline .tp-hd { font-size: 12.5px; color: var(--fg); margin-bottom: 15px; display: flex; align-items: flex-start; gap: 8px; line-height: 1.45; }
+.tier-panel-inline .tp-hd svg { color: var(--brand-strong); flex: 0 0 auto; margin-top: 1px; }
+.tp-body { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.tp-field { display: flex; flex-direction: column; gap: 8px; }
+.tp-field:nth-child(2) { flex: 1; min-width: 300px; }
+.tp-label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.tp-label em { font-style: normal; color: var(--t3-fg); font-weight: 700; text-transform: none; letter-spacing: 0; }
+.tier-choices { display: flex; gap: 8px; }
+.tier-choice { display: inline-flex; border: 1px solid var(--border); background: var(--panel); border-radius: 999px; padding: 5px; }
+.tier-choice:hover { border-color: var(--border-strong); }
+.tier-choice.sel { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-tint); }
+.tp-reason { font: inherit; font-size: 13px; color: var(--fg); background: var(--panel); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 9px 12px; width: 100%; outline: none; }
+.tp-reason:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint); }
+.tp-reason.err { border-color: var(--t3-fg); box-shadow: 0 0 0 3px color-mix(in oklch, var(--t3-fg) 15%, transparent); }
+.tp-err { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--t3-fg); font-weight: 600; }
+.tp-err svg { width: 12px; height: 12px; }
+.tp-actions { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.tp-note { font-size: 11.5px; color: var(--muted); }
+/* manual Tier History entry — visibly distinct from automatic entries */
+.tl-item.manual::before { border-color: var(--brand); background: var(--brand-tint); }
+.tl-manual { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--brand-strong); background: var(--brand-tint); border: 1px solid color-mix(in oklch, var(--brand) 26%, transparent); border-radius: 999px; padding: 2px 8px; }
+.tl-manual svg { width: 11px; height: 11px; }
 .repeat-banner { display: flex; align-items: flex-start; gap: 12px; border: 1px solid var(--warn-bd); background: var(--warn-bg); border-radius: var(--radius); padding: 12px 15px; margin-bottom: 14px; box-shadow: 0 0 0 1px color-mix(in oklch, var(--warn-fg) 15%, transparent); }
 .repeat-banner > svg { color: var(--warn-fg); width: 18px; height: 18px; margin-top: 1px; }
 .repeat-banner .rb-main { flex: 1; min-width: 0; }
@@ -792,7 +821,7 @@ const ACCOUNTS = [
 const DETAIL = {
   songhong: {
     hardRule: { label:'Compliance-deadline content', body:'This message cites a specific vessel\'s compliance/servicing deadline (MV Song Hong Pioneer\'s life-raft service window), so it is hard-capped at Tier 2 regardless of account tenure — a human must sign off before send.' },
-    draft: `Hi Ms. Pham, I hope this finds you well. Based on publicly available vessel particulars, it looks like MV Song Hong Pioneer's life-raft equipment may be approaching a typical service interval. If it would help, we'd be glad to check availability at our Vung Tau station and share a few dates — no obligation, just flagging it in case it's useful for your maintenance planning.`,
+    draft: `Hi Ms. Pham, I hope this finds you well. Our records show it's been a while since MV Song Hong Pioneer's life-raft equipment was last serviced, and it looks like it may be approaching its next scheduled service window. If it would help, we'd be glad to check availability at our Vung Tau station and share a few dates — no obligation, just flagging it in case it's useful for your maintenance planning.`,
     thread: [],
     dossier: {
       company:'Song Hong Shipping', segment:'Offshore support vessel operator · Haiphong',
@@ -930,6 +959,12 @@ const state = {
   liveResolutions: {},    // accountId -> [resolution records added this session]
   escLink: {},            // accountId -> prior-resolution index (repeat-escalation link)
   escLinkPending: {},     // accountId -> prior-resolution index selected but not yet committed
+  // manual tier override (Account Detail)
+  tierPanelOpen: false,
+  tierSel: null,          // tier selected in the change-tier panel
+  tierReason: '',
+  tierErr: false,
+  manualHistory: {},      // accountId -> [manual tier-change entries, most recent first]
   // Send Audit
   auditMarks: {},         // sendId -> 'fine' | 'concerning'
   auditOpen: {},          // sendId -> expanded?
@@ -1348,11 +1383,13 @@ function timelineHTML(items){
     ${items.map(it => `
       <div class="tl-item ${it.kind}">
         <div class="tl-when">${it.when}</div>
-        <div class="tl-title"><span class="tt">${it.title}</span>${tierBadge(it.badge)}</div>
+        <div class="tl-title"><span class="tt">${it.title}</span>${it.manual?`<span class="tl-manual" data-od-id="manual-tag">${svg('user')} Manual</span>`:''}${tierBadge(it.badge)}</div>
         <div class="tl-reason">${it.reason}</div>
       </div>`).join('')}
   </div></div>`;
 }
+/* full per-account history = human manual overrides (newest first) + automatic entries */
+function fullHistory(a){ return [ ...(state.manualHistory[a.id]||[]), ...auditFor(a) ]; }
 function auditFor(a){
   if (AUDIT[a.id]) return AUDIT[a.id];
   const created = { kind:'create', when:'On import', title:'Account created', badge: a.tier===1?1:2, reason:'Imported from the Mermaid Maritime Vietnam prospect list; starting tier set by new-account policy.' };
@@ -1413,8 +1450,8 @@ function renderDetail(){
   } else if (tab === 'history'){
     panel = `
       <div class="detail-panel" data-od-id="detail-history">
-        <p class="divider-note" style="margin-top:0">Every tier is earned or justified — this log shows why <b>${a.co}</b> sits where it does, and what would move it.</p>
-        ${timelineHTML(auditFor(a))}
+        <p class="divider-note" style="margin-top:0">Every tier is earned or justified — this log shows why <b>${a.co}</b> sits where it does, and what would move it. <b>Manual</b>-tagged entries are human overrides; the rest are system-driven.</p>
+        ${timelineHTML(fullHistory(a))}
       </div>`;
   } else if (tab === 'resolution'){
     panel = `
@@ -1440,10 +1477,39 @@ function renderDetail(){
         <h1>${a.co}</h1>
         <div class="sub">${svg('ship')} ${a.vessel} <span>·</span> ${svg('user')} ${a.contact}, ${a.role} <span>·</span> ${a.imo || (DETAIL[a.id]&&DETAIL[a.id].dossier.imo) || ''}</div>
       </div>
-      ${tierBadge(a.tier)}
+      <div class="detail-tier" data-od-id="detail-tier">
+        ${tierBadge(a.tier)}
+        <button class="tier-change-link" onclick="openTierPanel()" data-od-id="change-tier-link">${svg('pencil')} Change tier</button>
+      </div>
     </div>
+    ${state.tierPanelOpen ? tierPanel(a) : ''}
     ${tabbar}
     ${panel}`;
+}
+function tierPanel(a){
+  const sel = state.tierSel || a.tier;
+  return `
+    <div class="tier-panel-inline" data-od-id="change-tier-panel">
+      <div class="tp-hd">${svg('pencil')} <b>Change tier manually</b> — a human override that becomes a permanent Tier History entry, separate from any escalation.</div>
+      <div class="tp-body">
+        <div class="tp-field">
+          <span class="tp-label">New tier</span>
+          <div class="tier-choices">
+            ${[1,2,3].map(n=>`<button class="tier-choice ${sel===n?'sel':''}" onclick="setTierSel(${n})" data-od-id="tier-choice-${n}">${tierBadge(n)}</button>`).join('')}
+          </div>
+        </div>
+        <div class="tp-field">
+          <span class="tp-label">Reason <em>(required)</em></span>
+          <input type="text" class="tp-reason ${state.tierErr?'err':''}" value="${(state.tierReason||'').replace(/"/g,'&quot;')}" oninput="tierReasonInput(this.value)" placeholder="e.g. Pricing question resolved by AE, no other open issues on this account" data-od-id="tier-reason" />
+          ${state.tierErr ? `<span class="tp-err">${svg('info')} A reason is required — it's saved to Tier History.</span>` : ''}
+        </div>
+      </div>
+      <div class="tp-actions">
+        <button class="btn primary sm" onclick="confirmTier()" data-od-id="confirm-tier">${svg('check')} Confirm change</button>
+        <button class="btn sm" onclick="cancelTier()" data-od-id="cancel-tier">Cancel</button>
+        <span class="tp-note">Currently <b>Tier ${a.tier}</b> → <b>Tier ${sel}</b>. Nothing changes until you confirm.</span>
+      </div>
+    </div>`;
 }
 function escMsg(m){
   const cls = m.role === 'buyer' ? 'inbound' : (m.role === 'system' ? '' : 'draft');
@@ -1455,8 +1521,8 @@ function escMsg(m){
 /* ---------- Screen 4: Audit timeline ---------- */
 function renderAudit(){
   const ids = Object.keys(AUDIT);
-  const items = AUDIT[state.auditId];
   const a = acct(state.auditId);
+  const items = fullHistory(a);
   const options = ids.map(id => `<option value="${id}" ${id===state.auditId?'selected':''}>${acct(id).co} · ${acct(id).vessel}</option>`).join('');
 
   return `
@@ -1690,6 +1756,30 @@ function reopenEsc(id){ delete state.escResolved[id]; if (state.liveResolutions[
 function previewLink(id, idx){ if (idx===''){ delete state.escLinkPending[id]; } else { state.escLinkPending[id] = +idx; } render(); }
 function commitLink(id){ const p = state.escLinkPending[id]; if (p==null) return; state.escLink[id] = p; delete state.escLinkPending[id]; render(); toast('ok','link','Linked to a prior resolution — now flagged as a repeat escalation'); }
 function unlinkEscalation(id){ delete state.escLink[id]; delete state.escLinkPending[id]; render(); }
+
+/* manual tier override — general-purpose, human-driven, no access control (same as Settings) */
+function openTierPanel(){ const a=acct(state.detailId); state.tierPanelOpen=true; state.tierSel=a.tier; state.tierReason=''; state.tierErr=false; render(); }
+function cancelTier(){ state.tierPanelOpen=false; state.tierErr=false; render(); }
+function setTierSel(n){ state.tierSel=n; render(); }
+function tierReasonInput(v){
+  state.tierReason=v;
+  if (state.tierErr && v.trim()){ state.tierErr=false; const e=document.querySelector('.tp-err'); if(e) e.remove(); const i=document.querySelector('.tp-reason'); if(i) i.classList.remove('err'); }
+}
+function confirmTier(){
+  const a=acct(state.detailId); const from=a.tier; const to=state.tierSel||a.tier;
+  const reason=(state.tierReason||'').trim();
+  if (!reason){ state.tierErr=true; render(); return; }
+  if (to===from){ toast('warn','info',`Already Tier ${from} — pick a different tier to change it`); return; }
+  (state.manualHistory[a.id] = state.manualHistory[a.id] || []).unshift({
+    kind:'manual', manual:true, when:'Today · just now',
+    title:`Manually changed to Tier ${to}`, badge:to, from, to, by:'You',
+    reason:`Tier ${from} → Tier ${to}. “${reason}” — by You (manual override).`
+  });
+  a.tier = to;
+  state.tierPanelOpen=false; state.tierErr=false;
+  render();
+  toast('ok','check',`Tier changed to Tier ${to} — recorded in Tier History`);
+}
 
 /* Send Audit */
 function markSend(id, verdict){
