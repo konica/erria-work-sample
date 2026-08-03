@@ -231,10 +231,61 @@ CREATE UNIQUE INDEX "accounts_externalRef_key" ON "accounts"("externalRef");
 CREATE UNIQUE INDEX "vessels_imo_key" ON "vessels"("imo");
 
 -- CreateIndex
+CREATE INDEX "vessels_accountId_idx" ON "vessels"("accountId");
+
+-- CreateIndex
+CREATE INDEX "contacts_accountId_idx" ON "contacts"("accountId");
+
+-- CreateIndex
+CREATE INDEX "triggers_accountId_idx" ON "triggers"("accountId");
+
+-- CreateIndex
+CREATE INDEX "triggers_vesselId_idx" ON "triggers"("vesselId");
+
+-- CreateIndex
+CREATE INDEX "messages_accountId_idx" ON "messages"("accountId");
+
+-- CreateIndex
+CREATE INDEX "messages_triggerId_idx" ON "messages"("triggerId");
+
+-- CreateIndex
+CREATE INDEX "messages_escalationId_idx" ON "messages"("escalationId");
+
+-- CreateIndex
+CREATE INDEX "escalations_accountId_idx" ON "escalations"("accountId");
+
+-- CreateIndex
+CREATE INDEX "escalations_repeatOfResolutionId_idx" ON "escalations"("repeatOfResolutionId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "resolutions_escalationId_key" ON "resolutions"("escalationId");
 
 -- CreateIndex
+CREATE INDEX "resolutions_accountId_idx" ON "resolutions"("accountId");
+
+-- CreateIndex
+CREATE INDEX "resolutions_followupMessageId_idx" ON "resolutions"("followupMessageId");
+
+-- CreateIndex
+CREATE INDEX "tier_history_events_accountId_idx" ON "tier_history_events"("accountId");
+
+-- CreateIndex
+CREATE INDEX "tier_history_events_relatedMessageId_idx" ON "tier_history_events"("relatedMessageId");
+
+-- CreateIndex
+CREATE INDEX "tier_history_events_relatedEscalationId_idx" ON "tier_history_events"("relatedEscalationId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "audit_samples_messageId_key" ON "audit_samples"("messageId");
+
+-- CreateIndex
+CREATE INDEX "audit_samples_accountId_idx" ON "audit_samples"("accountId");
+
+-- CreateIndex
+CREATE INDEX "llm_calls_accountId_idx" ON "llm_calls"("accountId");
+
+-- CreateIndex
+CREATE INDEX "llm_calls_messageId_idx" ON "llm_calls"("messageId");
 
 -- AddForeignKey
 ALTER TABLE "vessels" ADD CONSTRAINT "vessels_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "accounts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

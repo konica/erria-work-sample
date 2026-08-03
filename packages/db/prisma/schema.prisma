@@ -156,6 +156,7 @@ model Vessel {
   flag      String
   triggers  Trigger[]
 
+  @@index([accountId])
   @@map("vessels")
 }
 
@@ -167,6 +168,7 @@ model Contact {
   role      String
   email     String?
 
+  @@index([accountId])
   @@map("contacts")
 }
 
@@ -186,6 +188,8 @@ model Trigger {
 
   messages Message[]
 
+  @@index([accountId])
+  @@index([vesselId])
   @@map("triggers")
 }
 
@@ -218,6 +222,9 @@ model Message {
   llmCalls            LlmCall[]
   resolutionFollowups Resolution[]       @relation("ResolutionFollowup")
 
+  @@index([accountId])
+  @@index([triggerId])
+  @@index([escalationId])
   @@map("messages")
 }
 
@@ -242,6 +249,8 @@ model Escalation {
   resolution        Resolution?
   tierHistoryEvents TierHistoryEvent[]
 
+  @@index([accountId])
+  @@index([repeatOfResolutionId])
   @@map("escalations")
 }
 
@@ -262,6 +271,8 @@ model Resolution {
 
   repeatEscalations Escalation[] @relation("RepeatEscalation")
 
+  @@index([accountId])
+  @@index([followupMessageId])
   @@map("resolutions")
 }
 
@@ -279,6 +290,9 @@ model TierHistoryEvent {
   relatedEscalationId String?
   relatedEscalation   Escalation?          @relation(fields: [relatedEscalationId], references: [id])
 
+  @@index([accountId])
+  @@index([relatedMessageId])
+  @@index([relatedEscalationId])
   @@map("tier_history_events")
 }
 
@@ -294,6 +308,7 @@ model AuditSample {
   reviewedAt   DateTime?
   notes        String?
 
+  @@index([accountId])
   @@map("audit_samples")
 }
 
@@ -325,5 +340,7 @@ model LlmCall {
   errorDetail    String?
   createdAt      DateTime       @default(now())
 
+  @@index([accountId])
+  @@index([messageId])
   @@map("llm_calls")
 }
