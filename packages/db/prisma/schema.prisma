@@ -1,0 +1,346 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum IcpBand {
+  high
+  med
+  low
+}
+
+enum TriggerSource {
+  crm
+  class_records
+  public_data
+  buyer_reply
+}
+
+enum ConfidenceLabel {
+  high
+  mid
+  low
+}
+
+enum TriggerStatus {
+  new
+  processing
+  drafted
+  superseded
+  needs_triage
+}
+
+enum MessageRole {
+  agent_draft
+  agent_sent
+  buyer_inbound
+  system_note
+  human_reply
+}
+
+enum MessageStatus {
+  pending_review
+  approved
+  rejected
+  sent
+  needs_triage
+}
+
+enum MessageChannel {
+  email
+}
+
+enum HardTriggerRule {
+  pricing_question
+  technical_compliance_question
+  negative_sentiment
+  relationship_conflict
+  compliance_deadline_content
+  non_english_language
+  conflicting_signals
+  classification_uncertain
+}
+
+enum EscalationStatus {
+  active
+  resolved
+}
+
+enum ResolutionActionType {
+  mark_resolved
+  compose_send
+}
+
+enum OutcomeTag {
+  closed_won
+  re_engaged
+  no_response
+  churned
+  closed_no_action
+}
+
+enum TierHistoryEventType {
+  create
+  clean_approval
+  promote
+  demote
+  escalate
+  hold_at_tier
+  current_draft
+  manual_override
+}
+
+enum AuditReviewStatus {
+  unreviewed
+  fine
+  concerning
+}
+
+enum SentimentFloor {
+  Low
+  Medium
+  High
+}
+
+enum LlmCallPurpose {
+  draft_generation
+  hard_trigger_classification
+}
+
+enum LlmCallOutcome {
+  success
+  retried_success
+  timeout
+  error
+}
+
+model Account {
+  id                  String   @id @default(uuid())
+  externalRef         String?  @unique
+  companyName         String
+  segment             String
+  hub                 String
+  icpScore            Int
+  icpBand             IcpBand
+  relationshipSummary String
+  currentTier         Int
+  tierRationale       String
+  cleanApprovalsCount Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  lastActivityAt      DateTime @default(now())
+
+  vessels           Vessel[]
+  contacts          Contact[]
+  triggers          Trigger[]
+  messages          Message[]
+  escalations       Escalation[]
+  resolutions       Resolution[]
+  tierHistoryEvents TierHistoryEvent[]
+  auditSamples      AuditSample[]
+  llmCalls          LlmCall[]
+
+  @@map("accounts")
+}
+
+model Vessel {
+  id        String    @id @default(uuid())
+  accountId String
+  account   Account   @relation(fields: [accountId], references: [id])
+  name      String
+  imo       String    @unique
+  flag      String
+  triggers  Trigger[]
+
+  @@index([accountId])
+  @@map("vessels")
+}
+
+model Contact {
+  id        String  @id @default(uuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+  name      String
+  role      String
+  email     String?
+
+  @@index([accountId])
+  @@map("contacts")
+}
+
+model Trigger {
+  id                String          @id @default(uuid())
+  accountId         String
+  account           Account         @relation(fields: [accountId], references: [id])
+  vesselId          String?
+  vessel            Vessel?         @relation(fields: [vesselId], references: [id])
+  category          String
+  description       String
+  source            TriggerSource
+  confidenceLabel   ConfidenceLabel
+  verifiabilityNote String
+  detectedAt        DateTime
+  status            TriggerStatus   @default(new)
+
+  messages Message[]
+
+  @@index([accountId])
+  @@index([vesselId])
+  @@map("triggers")
+}
+
+model Message {
+  id                     String         @id @default(uuid())
+  accountId              String
+  account                Account        @relation(fields: [accountId], references: [id])
+  triggerId              String?
+  trigger                Trigger?       @relation(fields: [triggerId], references: [id])
+  escalationId           String?
+  escalation             Escalation?    @relation(fields: [escalationId], references: [id])
+  role                   MessageRole
+  body                   String
+  originalBody           String?
+  edited                 Boolean        @default(false)
+  status                 MessageStatus
+  tierContext            Int
+  confidenceMeta         Json?
+  hardRuleFlags          Json?
+  decidedBy              String?
+  decidedAt              DateTime?
+  sentAt                 DateTime?
+  channel                MessageChannel @default(email)
+  isFollowup             Boolean?
+  followupSequenceNumber Int?
+  createdAt              DateTime       @default(now())
+
+  auditSample         AuditSample?
+  tierHistoryEvents   TierHistoryEvent[]
+  llmCalls            LlmCall[]
+  resolutionFollowups Resolution[]       @relation("ResolutionFollowup")
+
+  @@index([accountId])
+  @@index([triggerId])
+  @@index([escalationId])
+  @@map("messages")
+}
+
+model Escalation {
+  id                        String           @id @default(uuid())
+  accountId                 String
+  account                   Account          @relation(fields: [accountId], references: [id])
+  triggerMessageId          String?
+  hardTriggerRule           HardTriggerRule
+  reasonSummary             String
+  detail                    String
+  recommendedNextStep       String
+  recommendedNextStepEdited String?
+  agentSendDisabled         Boolean          @default(true)
+  status                    EscalationStatus @default(active)
+  repeatOfResolutionId      String?
+  repeatOfResolution        Resolution?      @relation("RepeatEscalation", fields: [repeatOfResolutionId], references: [id])
+  createdAt                 DateTime         @default(now())
+  resolvedAt                DateTime?
+
+  messages          Message[]
+  resolution        Resolution?
+  tierHistoryEvents TierHistoryEvent[]
+
+  @@index([accountId])
+  @@index([repeatOfResolutionId])
+  @@map("escalations")
+}
+
+model Resolution {
+  id                String               @id @default(uuid())
+  escalationId      String               @unique
+  escalation        Escalation           @relation(fields: [escalationId], references: [id])
+  accountId         String
+  account           Account              @relation(fields: [accountId], references: [id])
+  actionType        ResolutionActionType
+  actionTaken       String
+  followupMessageId String?
+  followupMessage   Message?             @relation("ResolutionFollowup", fields: [followupMessageId], references: [id])
+  followupSentAt    DateTime?
+  outcomeTag        OutcomeTag
+  resolvedBy        String
+  createdAt         DateTime             @default(now())
+
+  repeatEscalations Escalation[] @relation("RepeatEscalation")
+
+  @@index([accountId])
+  @@index([followupMessageId])
+  @@map("resolutions")
+}
+
+model TierHistoryEvent {
+  id                  String               @id @default(uuid())
+  accountId           String
+  account             Account              @relation(fields: [accountId], references: [id])
+  eventType           TierHistoryEventType
+  fromTier            Int?
+  toTier              Int?
+  occurredAt          DateTime             @default(now())
+  reason              String
+  relatedMessageId    String?
+  relatedMessage      Message?             @relation(fields: [relatedMessageId], references: [id])
+  relatedEscalationId String?
+  relatedEscalation   Escalation?          @relation(fields: [relatedEscalationId], references: [id])
+
+  @@index([accountId])
+  @@index([relatedMessageId])
+  @@index([relatedEscalationId])
+  @@map("tier_history_events")
+}
+
+model AuditSample {
+  id           String            @id @default(uuid())
+  messageId    String            @unique
+  message      Message           @relation(fields: [messageId], references: [id])
+  accountId    String
+  account      Account           @relation(fields: [accountId], references: [id])
+  sampledAt    DateTime          @default(now())
+  reviewStatus AuditReviewStatus @default(unreviewed)
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  notes        String?
+
+  @@index([accountId])
+  @@map("audit_samples")
+}
+
+model Setting {
+  id                       Int            @id @default(1)
+  tier1PromotionThreshold  Int            @default(2)
+  tier1AuditSampleRate     Int            @default(10)
+  maxFollowups             Int            @default(2)
+  minDaysBetweenFollowups  Int            @default(5)
+  sentimentConfidenceFloor SentimentFloor @default(Medium)
+  updatedAt                DateTime       @updatedAt
+
+  @@map("settings")
+}
+
+model LlmCall {
+  id             String         @id @default(uuid())
+  purpose        LlmCallPurpose
+  accountId      String?
+  account        Account?       @relation(fields: [accountId], references: [id])
+  messageId      String?
+  message        Message?       @relation(fields: [messageId], references: [id])
+  modelId        String
+  promptVersion  String
+  requestTokens  Int
+  responseTokens Int
+  latencyMs      Int
+  outcome        LlmCallOutcome
+  errorDetail    String?
+  createdAt      DateTime       @default(now())
+
+  @@index([accountId])
+  @@index([messageId])
+  @@map("llm_calls")
+}

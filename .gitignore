@@ -7,3 +7,7 @@ ideation
 agentic-sdlc-agent-mapping.md
 image.png
 brainstorm/mockup/*.zip
+node_modules/
+dist/
+packages/*/src/generated/
+.env
