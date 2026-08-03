@@ -78,10 +78,14 @@ For the full system design, data model rationale, and planned flows, see:
 
 - Node.js **>=24**
 - pnpm **10** (`packageManager` is pinned to `pnpm@10.0.0`)
-- A PostgreSQL 17-compatible database reachable via `DATABASE_URL` (for running the apps or the
-  `packages/db` integration test outside of Testcontainers)
-- Docker, for the Testcontainers-backed `packages/db` integration test (it spins up a disposable
-  `postgres:17` container automatically — no manual database needed just to run `pnpm test`)
+- Docker, for two independent things:
+  - `pnpm compose:up`, which starts the local dependencies (PostgreSQL 17) the apps need — see
+    [Local dependencies](#local-dependencies)
+  - the Testcontainers-backed `packages/db` integration test, which spins up its own disposable
+    `postgres:17` container (no manual database needed just to run `pnpm test`)
+
+Any PostgreSQL 17-compatible database reachable via `DATABASE_URL` works if you would rather not
+use `compose.yaml`.
 
 ## Getting started
 
@@ -94,8 +98,8 @@ cp .env.example .env
 Either order works. `pnpm install` runs `prisma generate` through `packages/db`'s `postinstall`,
 and that step deliberately does **not** require `DATABASE_URL` — `generate` never connects to a
 database, so a fresh clone installs cleanly before any `.env` exists (see the comment in
-`packages/db/prisma.config.ts`). The commands that do connect need it: `prisma migrate deploy`
-below, and running either app.
+`packages/db/prisma.config.ts`). The commands that do connect need it: `pnpm compose:up` (whose
+migration step reads it) and running either app.
 
 `.env.example` documents the environment variables the apps read:
 
@@ -108,18 +112,28 @@ below, and running either app.
 | `WORKER_INTERNAL_URL` | reserved for `console-api` → `worker` calls | Not yet consumed |
 | `CONSOLE_WEB_ORIGIN` | `console-api` (CORS) | Unset means CORS is closed by default, not open |
 
-If you don't already have a local Postgres, a disposable one for manual testing looks like:
+## Local dependencies
+
+`compose.yaml` holds the runtime dependencies the apps need locally — today just PostgreSQL.
+One command starts them and applies the schema:
 
 ```bash
-docker run -d --name erria-postgres -e POSTGRES_USER=erria -e POSTGRES_PASSWORD=erria \
-  -e POSTGRES_DB=erria_dev -p 5432:5432 postgres:17
+pnpm compose:up      # docker compose up -d --wait, then prisma migrate deploy
+pnpm compose:down    # stop the stack, keep the data
+pnpm compose:reset   # wipe the volume and come back up migrated
 ```
 
-Then apply the schema:
+`compose:up` applies migrations as well as starting the container, which its name doesn't
+advertise — it is deliberate, so that bringing the stack up leaves you with a database you can
+actually query. It needs `.env` to exist first, because the migration reads `DATABASE_URL`
+through `packages/db/prisma.config.ts`.
 
-```bash
-pnpm --filter @erria/db exec prisma migrate deploy
-```
+Data lives in a named volume (`erria-pgdata`) and survives `compose:down`; only `compose:reset`
+discards it. If something already owns port 5432, set `POSTGRES_PORT` in `.env` — Compose reads
+that file automatically — and update `DATABASE_URL` to match.
+
+`pnpm test` does not use this stack: `packages/db`'s integration test starts its own disposable
+`postgres:17` through Testcontainers, so tests pass whether or not the compose stack is running.
 
 ## Running the apps
 
@@ -199,6 +213,7 @@ docs/
   superpowers/    specs/ (behavior design) and plans/ (implementation plans)
   agents/         repo agent-skill configuration notes
 design-system/    design tokens and design reference doc
+compose.yaml      local runtime dependencies (PostgreSQL) — see Local dependencies
 CONTEXT.md        domain glossary — read this before naming anything new
 ```
 

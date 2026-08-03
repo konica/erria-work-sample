@@ -1,0 +1,38 @@
+# Local runtime dependencies for development. Not a deployment artifact — the apps
+# themselves run on the host via `pnpm --filter <app> dev`, and CI uses Testcontainers
+# rather than this file.
+#
+# Bring the stack up with `pnpm compose:up` (which also applies migrations).
+#
+# An explicit project name keeps the stack identity stable no matter which checkout
+# or worktree it is started from, so `compose:down` always finds what `compose:up`
+# started instead of leaving one orphaned stack per directory.
+name: erria
+
+services:
+  postgres:
+    image: postgres:17 # keep in sync with packages/db/src/test-utils/testcontainers-postgres.ts
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-erria}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erria}
+      POSTGRES_DB: ${POSTGRES_DB:-erria_dev}
+    ports:
+      # Overridable for anyone already running Postgres on 5432. Compose reads the
+      # workspace-root .env automatically, so POSTGRES_PORT can be set there.
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - erria-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # -h 127.0.0.1 is deliberate: during initdb the entrypoint runs a temporary
+      # server reachable over the unix socket, so a socket-based pg_isready reports
+      # ready before the real server accepts TCP connections. Checking TCP is both
+      # stricter and what the apps actually do. This is what makes `up --wait`
+      # meaningful — without a healthcheck it returns as soon as the container runs.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-erria} -d ${POSTGRES_DB:-erria_dev}']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  erria-pgdata:
