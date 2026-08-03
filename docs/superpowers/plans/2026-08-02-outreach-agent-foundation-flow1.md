@@ -1832,6 +1832,9 @@ git commit -m "feat(domain): add recordIncomingTrigger — transactional trigger
 - Create: `apps/worker/src/routes/process-trigger.ts`
 - Modify: `apps/worker/src/server.ts` — accept and wire optional deps
 - Modify: `apps/worker/src/main.ts` — construct real `prisma`/`Anthropic` deps
+- Modify: `apps/worker/package.json` — add `"@erria/domain": "workspace:*"` back to
+  `dependencies` (Tasks 3/4 deliberately omitted it since nothing used it yet; this task's route
+  is the first thing in `apps/worker` that imports from `@erria/domain`)
 - Test: `apps/worker/src/routes/process-trigger.integration.spec.ts`
 
 **Interfaces:**
@@ -2150,6 +2153,9 @@ git commit -m "feat(worker): implement POST /internal/process-trigger/:triggerId
 - Create: `apps/console-api/src/worker-client/worker-client.service.ts`
 - Create: `apps/console-api/src/worker-client/worker-client.module.ts`
 - Modify: `apps/console-api/src/app.module.ts` — import `TriggersModule`
+- Modify: `apps/console-api/package.json` — add `"@erria/domain": "workspace:*"` back to
+  `dependencies` (Task 3 deliberately omitted it since nothing used it yet; `triggers.service.ts`'s
+  `recordIncomingTrigger` import is the first thing in `apps/console-api` that needs it)
 - Test: `apps/console-api/src/triggers/triggers.service.integration.spec.ts`
 
 **Interfaces:**
