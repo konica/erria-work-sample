@@ -50,8 +50,16 @@ _Avoid_: Closure, Outcome (Outcome Tag is a field on Resolution, not the Resolut
 **Tier**:
 An Account's current standing: 1 (agent sends autonomously — not yet implemented, see
 [ADR-0002](docs/adr/0002-tier-1-autonomous-send-deferred.md)), 2 (agent drafts, human approves), or
-3 (human-only, no agent drafting). Tracked as `Account.currentTier`.
+3 (human-only, no agent drafting). Tracked as `Account.currentTier`. Tier 1 is only ever *earned*
+via Clean Approvals — never granted by a Manual Tier Override (see
+[ADR-0004](docs/adr/0004-tier-1-is-earned-never-set-manually.md)).
 _Avoid_: Level, Stage
+
+**Manual Tier Override**:
+A human deliberately changing an Account's Tier as its own explicit action, with a required reason,
+recorded as a distinctly-tagged Tier History entry. Only ever moves an Account to Tier 2 or Tier 3;
+never to Tier 1. Never an automatic side effect of resolving an Escalation.
+_Avoid_: Manual demotion (it can also restore an account to Tier 2), tier edit
 
 **Tier Context**:
 The tier a specific Message was governed by at the moment it was drafted — not necessarily the

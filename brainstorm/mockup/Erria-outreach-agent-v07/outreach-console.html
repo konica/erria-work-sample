@@ -821,7 +821,7 @@ const ACCOUNTS = [
 const DETAIL = {
   songhong: {
     hardRule: { label:'Compliance-deadline content', body:'This message cites a specific vessel\'s compliance/servicing deadline (MV Song Hong Pioneer\'s life-raft service window), so it is hard-capped at Tier 2 regardless of account tenure — a human must sign off before send.' },
-    draft: `Hi Ms. Pham, I hope this finds you well. Our records show it's been a while since MV Song Hong Pioneer's life-raft equipment was last serviced, and it looks like it may be approaching its next scheduled service window. If it would help, we'd be glad to check availability at our Vung Tau station and share a few dates — no obligation, just flagging it in case it's useful for your maintenance planning.`,
+    draft: `Hi Ms. Pham, I hope this finds you well. Based on publicly available vessel particulars, it looks like MV Song Hong Pioneer's life-raft equipment may be approaching a typical service interval. If it would help, we'd be glad to check availability at our Vung Tau station and share a few dates — no obligation, just flagging it in case it's useful for your maintenance planning.`,
     thread: [],
     dossier: {
       company:'Song Hong Shipping', segment:'Offshore support vessel operator · Haiphong',
@@ -1495,8 +1495,9 @@ function tierPanel(a){
         <div class="tp-field">
           <span class="tp-label">New tier</span>
           <div class="tier-choices">
-            ${[1,2,3].map(n=>`<button class="tier-choice ${sel===n?'sel':''}" onclick="setTierSel(${n})" data-od-id="tier-choice-${n}">${tierBadge(n)}</button>`).join('')}
+            ${[2,3].map(n=>`<button class="tier-choice ${sel===n?'sel':''}" onclick="setTierSel(${n})" data-od-id="tier-choice-${n}">${tierBadge(n)}</button>`).join('')}
           </div>
+          <span class="tp-note">Tier 1 is earned through clean approvals, never set by hand.</span>
         </div>
         <div class="tp-field">
           <span class="tp-label">Reason <em>(required)</em></span>
