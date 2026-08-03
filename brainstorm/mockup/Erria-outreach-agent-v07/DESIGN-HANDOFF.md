@@ -90,4 +90,4 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 7. Keep landing page, product screens, and OS widget/quick-access surfaces separate when present.
 8. Confirm the production result visually matches the exported design before refactoring internals.
 9. Reject implementation shortcuts that flatten the design into generic cards, generic gradients, placeholder stats, or framework-default typography.
-10. If a detail is ambiguous, keep the exported HTML/CSS/JS behavior rather than inventing a new pattern.
+10. If a detai

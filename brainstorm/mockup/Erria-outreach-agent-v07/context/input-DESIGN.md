@@ -120,5 +120,4 @@ programmatic use.
 - `#cc3366` accent usage is unconfirmed — avoid leaning on it for anything status-critical (e.g.
   don't repurpose it as an error/danger color without checking it isn't actually a themed link
   color with no semantic meaning).
-- All of this reflects a single-page crawl of erria.dk's homepage, not a full site or Erria's
-  actual brand guidelines — treat as a starter point, not ground truth.
+- All of this reflects a single-page crawl of

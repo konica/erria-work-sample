@@ -1753,40 +1753,4 @@ function paintThemeBtn(){
 document.addEventListener('click', (e) => {
   const nav = e.target.closest('.nav-item'); if (nav){ setView(nav.dataset.nav); return; }
   const pg = e.target.closest('[data-page]'); if (pg){ state.page = +pg.dataset.page; render(); return; }
-  const dt = e.target.closest('[data-detail-tab]'); if (dt){ state.detailTab = dt.dataset.detailTab; state.editing = false; state.editingNext = false; render(); return; }
-  const row = e.target.closest('[data-open]'); if (row){ openAccount(row.dataset.open); return; }
-  const sa = e.target.closest('[data-sa-toggle]'); if (sa){ toggleSend(sa.dataset.saToggle); return; }
-  const chip = e.target.closest('[data-filter]'); if (chip){ state.filter = chip.dataset.filter; state.page = 1; render(); return; }
-  if (e.target.closest('#themeToggle')){ toggleTheme(); return; }
-});
-document.addEventListener('change', (e) => {
-  if (e.target.id === 'auditSelect'){ state.auditId = e.target.value; render(); }
-});
-document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { if (state.editing) saveEdit(); else if (state.editingNext) saveNext(); }
-    return;
-  }
-  // row open via Enter
-  const row = e.target.closest && e.target.closest('[data-open]');
-  if (row && e.key === 'Enter'){ openAccount(row.dataset.open); return; }
-  // review shortcuts — active on the Account Detail working tab for a pending Tier 2 draft
-  if (state.view === 'detail' && state.detailTab === 'work'){
-    const a = acct(state.detailId);
-    if (a && a.tier === 2 && !state.decisions[a.id] && !state.editing){
-      if (e.key === 'a' || e.key === 'A'){ decide(a.id,'approved'); }
-      else if (e.key === 'r' || e.key === 'R'){ decide(a.id,'rejected'); }
-      else if (e.key === 'e' || e.key === 'E'){ toggleEdit(); }
-    }
-  }
-});
-
-/* boot */
-(function(){
-  try { const saved = localStorage.getItem('erria-theme'); if (saved) document.documentElement.setAttribute('data-theme', saved); } catch(e){}
-  paintThemeBtn();
-  render();
-})();
-</script>
-</body>
-</html>
+  const dt = e.target.closest('[data-detail-tab]'); if (dt){ state.detailTab = dt.dataset.detailTab

@@ -187,7 +187,4 @@
     "Extract tokens before writing framework components.",
     "Implement app-specific modules with real states instead of generic card grids.",
     "Preserve or rebuild JS interactions for meaningful UX actions.",
-    "Validate screenshots at desktop/tablet/mobile viewports with no horizontal overflow.",
-    "Keep landing pages, in-app modules, and OS widgets as separate implementation surfaces."
-  ]
-}
+  

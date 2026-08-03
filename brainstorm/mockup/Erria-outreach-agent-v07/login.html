@@ -398,15 +398,4 @@ document.addEventListener('click', (e) => {
 
 /* boot — restore prefs; allow deep-linking a state via ?state= (real app states, not just mock) */
 (function(){
-  try {
-    const th = localStorage.getItem('erria-theme'); if (th) document.documentElement.setAttribute('data-theme', th);
-    const lg = localStorage.getItem('erria-lang'); if (lg) state.lang = lg;
-  } catch(e){}
-  const q = new URLSearchParams(location.search).get('state');
-  if (q && VALID.includes(q) && q !== 'redirecting') state.view = q;
-  paintTheme();
-  render();
-})();
-</script>
-</body>
-</html>
+  try {

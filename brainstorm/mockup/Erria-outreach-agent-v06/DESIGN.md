@@ -61,8 +61,4 @@ Build Erria Outreach Agent
 ## Layout
 
 - **Radius:** 8px
-- **Border weight:** 1px
-- **Spacing:** 8px baseline grid
-
-### Posture rules
-- (none)
+- **Border weight:** 1p
