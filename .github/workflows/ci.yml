@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # @erria/db's dependents (console-api, worker, domain) resolve its types through
+      # package.json's `types` field (./dist/index.d.ts). `postinstall` only runs
+      # `prisma generate`, not the `tsc` half of this package's `build` script, so
+      # without this step typecheck below fails to find @erria/db's type declarations.
+      - run: pnpm --filter @erria/db run build
+
+      - run: pnpm -r run lint
+
+      - run: pnpm -r run typecheck
+
+      - run: pnpm -r run test
+        env:
+          ANTHROPIC_API_KEY: sk-test-placeholder-not-a-real-key
