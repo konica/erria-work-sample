@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "fastify": "^5.2.0",
-    "@anthropic-ai/sdk": "^0.70.0",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@erria/db": "workspace:*"
   },
   "devDependencies": {

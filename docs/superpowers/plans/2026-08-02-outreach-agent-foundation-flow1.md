@@ -920,7 +920,7 @@ git commit -m "feat(console-api): scaffold NestJS app with health check and Pris
   },
   "dependencies": {
     "fastify": "^5.2.0",
-    "@anthropic-ai/sdk": "^0.70.0",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@erria/db": "workspace:*"
   },
   "devDependencies": {
@@ -935,6 +935,13 @@ Deliberately no `@erria/domain` dependency here yet, same reasoning as Task 3 �
 (a health check and a job-name stub) doesn't import from it, and `packages/domain` has no
 `package.json` until Task 5. Task 8 adds it back to this file when the worker's real
 process-trigger route needs `draftMessage`/`TONE_SYSTEM_PROMPT`.
+
+`^0.115.0` (npm latest as of this plan's authoring) matters, not just "some 0.x version": Task 6's
+structured-output API (`client.messages.parse()`, `output_config.format`, `zodOutputFormat` from
+the non-beta `helpers/zod` path, `.parsed_output`) only exists at the top level starting partway
+through the 0.x line — `^0.70.0` still gates all of this behind `client.beta.messages...`/
+`helpers/beta/zod`/`output_format`/`.parsed`. Verified directly against both versions' installed
+`.d.ts` files (not assumed) — see Task 6's own note on this below.
 
 `apps/worker/tsconfig.json`: identical shape to `apps/console-api/tsconfig.json` from Task 3 (no
 decorators needed here, so omit `experimentalDecorators`/`emitDecoratorMetadata`):
@@ -1093,8 +1100,8 @@ this plan explicitly does not implement (Task 7 is where that gets rejected loud
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.70.0",
-    "zod": "^3.24.0",
+    "@anthropic-ai/sdk": "^0.115.0",
+    "zod": "^4.0.0",
     "@erria/db": "workspace:*"
   },
   "devDependencies": {
@@ -1289,6 +1296,21 @@ git commit -m "feat(domain): add recommendTierForTrigger (spec §3 rollout overl
 - Produces: `draftMessage(input, deps): Promise<DraftMessageResult>`, `DraftMessageInput`,
   `DraftMessageResult`, `TONE_SYSTEM_PROMPT`, `DRAFT_MODEL_ID` — all consumed by Task 8's worker
   route.
+
+**SDK version note:** this task's code below requires `@anthropic-ai/sdk` `^0.115.0` specifically
+(see the package.json in Step 1) — `client.messages.parse()`, `output_config.format`, and
+`helpers/zod`'s `zodOutputFormat` are all beta-gated (`client.beta.messages...`,
+`helpers/beta/zod`, `output_format`, `.parsed`) on older 0.x releases. Verified directly against
+both versions' installed `.d.ts` files, not assumed from memory — do not "helpfully" downgrade
+this pin to match an older sibling package without re-checking.
+
+**Known TS-strictness gap in the test below:** `Anthropic.RateLimitError`'s inherited constructor
+types its `headers` parameter as non-optional `Headers` (`RateLimitError extends
+APIError<429, Headers>`, not `Headers | undefined`), so the test's literal `undefined` 4th
+argument fails `tsc --noEmit` even though it's valid at runtime (`vitest run`, using esbuild,
+won't catch it). Add a `// @ts-expect-error — RateLimitError's inherited constructor types
+\`headers\` as non-optional \`Headers\`; \`undefined\` is valid at runtime` comment on the line
+above that constructor call rather than rewriting the test's literal argument.
 
 - [ ] **Step 1: The structured-output schema**
 
