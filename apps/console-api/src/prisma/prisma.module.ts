@@ -1,8 +1,9 @@
 import { Global, Module } from '@nestjs/common';
 import { prisma } from '@erria/db';
 import { PrismaShutdownService } from './prisma-shutdown.service.js';
+import { PRISMA } from './prisma.tokens.js';
 
-export const PRISMA = Symbol('PRISMA');
+export { PRISMA } from './prisma.tokens.js';
 
 @Global()
 @Module({
