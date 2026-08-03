@@ -726,8 +726,7 @@ git commit -m "feat(db): add full Prisma schema, initial migration, and Testcont
     "class-validator": "^0.14.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "@erria/db": "workspace:*",
-    "@erria/domain": "workspace:*"
+    "@erria/db": "workspace:*"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.0.0",
@@ -739,6 +738,10 @@ git commit -m "feat(db): add full Prisma schema, initial migration, and Testcont
   }
 }
 ```
+
+Deliberately no `@erria/domain` dependency here yet — this task's code doesn't import from it, and
+`packages/domain` has no `package.json` until Task 5. Task 9 (which does need it, for
+`recordIncomingTrigger`) adds it back to this file when it lands.
 
 `apps/console-api/tsconfig.json`:
 ```json
@@ -918,8 +921,7 @@ git commit -m "feat(console-api): scaffold NestJS app with health check and Pris
   "dependencies": {
     "fastify": "^5.2.0",
     "@anthropic-ai/sdk": "^0.70.0",
-    "@erria/db": "workspace:*",
-    "@erria/domain": "workspace:*"
+    "@erria/db": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.0",
@@ -928,6 +930,11 @@ git commit -m "feat(console-api): scaffold NestJS app with health check and Pris
   }
 }
 ```
+
+Deliberately no `@erria/domain` dependency here yet, same reasoning as Task 3 — this task's code
+(a health check and a job-name stub) doesn't import from it, and `packages/domain` has no
+`package.json` until Task 5. Task 8 adds it back to this file when the worker's real
+process-trigger route needs `draftMessage`/`TONE_SYSTEM_PROMPT`.
 
 `apps/worker/tsconfig.json`: identical shape to `apps/console-api/tsconfig.json` from Task 3 (no
 decorators needed here, so omit `experimentalDecorators`/`emitDecoratorMetadata`):
