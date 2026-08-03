@@ -1,0 +1,20 @@
+# ggshield configuration — groundwork for "08 — CI pipeline" (#8), which will add the
+# workflow that actually reads this file. Nothing in the repository consumes it today.
+#
+# This does NOT affect the GitGuardian GitHub App's pull-request check. That check is
+# configured from the GitGuardian dashboard and via GitHub custom properties, and does not
+# read repository-level config:
+# https://docs.gitguardian.com/internal-monitoring/prevent/detect-secrets-in-real-time-in-github
+version: 2
+
+secret:
+  ignored_paths:
+    # Local-development placeholders, not credentials to anything that exists:
+    #   .env.example  — ships DATABASE_URL with the erria/erria dev user the README documents
+    #   compose.yaml  — defaults POSTGRES_PASSWORD to the same value so `pnpm compose:up`
+    #                   needs no extra env. The database is published to localhost only and
+    #                   is recreated from scratch by `pnpm compose:reset`.
+    #
+    # Exact paths rather than globs, so a real secret committed anywhere else is still caught.
+    - '.env.example'
+    - 'compose.yaml'
