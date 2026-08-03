@@ -90,7 +90,7 @@ environment:**
    theoretical one.
 3. **Scheduled Container Apps Jobs** (cron trigger) for the two time-driven behaviors the design
    spec requires: follow-up cadence checks (§5 of the behavior spec — "no reply after N business
-   days") and periodic audit-sample queue maintenance (§11). Using ACA Jobs for this means the team
+   days") and periodic audit-sample queue maintenance (§10). Using ACA Jobs for this means the team
    doesn't need to also learn/operate Azure Functions or Logic Apps just for a cron job — one less
    service type.
 
@@ -124,7 +124,7 @@ instance, VNet-integrated (no public endpoint).**
 
 The data model — accounts, tier state, escalations, resolutions, settings, audit-sample records —
 is straightforwardly relational with real referential integrity needs (a Resolution belongs to an
-Escalation belongs to an Account; the repeat-escalation flag in §10 of the behavior spec links two
+Escalation belongs to an Account; the repeat-escalation flag in §9 of the behavior spec links two
 Resolution/Escalation rows to each other). This is exactly what a relational database is for.
 
 - **Burstable B1ms** (1 vCore, 2 GiB RAM) is enough for a database serving a handful of concurrent
@@ -314,7 +314,7 @@ Sized for a two-person team checking in periodically, not a 24/7 SRE function.
     unfamiliar recurring cost line (Claude API usage plus Azure infra), a monthly budget threshold
     alert is more valuable here than most infra alerts.
 - **Business-level visibility** (tier distribution, escalation volumes, audit-sample pass/fail
-  rates called for in the behavior spec's §8/§11) is better served by a simple in-app reporting
+  rates called for in the behavior spec's §8/§10) is better served by a simple in-app reporting
   view backed by normal database queries than by infrastructure monitoring tooling — this is an
   application feature, not part of the cloud architecture, but it's worth noting here so it isn't
   accidentally built twice (once as an app feature, once as an Azure Monitor workbook).

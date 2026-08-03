@@ -17,8 +17,8 @@ jobs" on one PostgreSQL database. It assumes that infra decision as a starting p
 it where the application's actual behavior (documented in the behavior spec and shown in the
 mockup) demands more precision than "a worker calls Claude and writes to the database."
 
-**Explicitly not designed here** (see §13 for the full list, matching the behavior spec's own
-non-goals in its §13):
+**Explicitly not designed here** (see §12 for the full list, matching the behavior spec's own
+non-goals in its §12):
 
 - The upstream trigger-detection / ICP-scoring ML pipeline. This design treats a `Trigger` record
   and an `Account.icp_score` as inputs that arrive from that pipeline, not as something this system
@@ -28,8 +28,8 @@ non-goals in its §13):
   app, an orchestration worker, scheduled Container Apps Jobs).
 - Auth/session mechanics — Keycloak/OIDC is decided; this doc only notes where the console API
   reads the authenticated principal (e.g. `decided_by` on an approval) and does not design login.
-- RBAC / access control, and the settings change log that depends on it — the behavior spec (§12,
-  §13) explicitly defers both together for a two-person team.
+- RBAC / access control, and the settings change log that depends on it — the behavior spec (§11,
+  §12) explicitly defers both together for a two-person team.
 - The actual outbound message channel (SMTP/Graph/etc.) implementation — treated as a thin,
   swappable adapter behind one interface (§2, Message Dispatch module), because the behavior spec
   doesn't specify Erria's mail infrastructure and it isn't this design's job to invent it.
@@ -50,7 +50,7 @@ library**:
   internal HTTP server for on-demand work triggered by the Console API (approve → send, inbound
   reply → classify), and (b) the same image invoked with a different entrypoint argument by Azure
   Container Apps **scheduled Jobs** for three time-driven behaviors: follow-up cadence checks
-  (§5), audit-sample queue maintenance (§11), and a **stuck-send reconciliation sweep** (§5 Flow 2)
+  (§5), audit-sample queue maintenance (§10), and a **stuck-send reconciliation sweep** (§5 Flow 2)
   — this is exactly the Azure doc's §2 "Orchestration worker (Container App, scale-to-zero) +
   scheduled Jobs" sketch, made concrete.
 
@@ -64,12 +64,12 @@ internal module boundaries" actually lives, not in network topology:
 │  ┌──────────────────┐  ┌───────────────────┐  ┌──────────────────┐ │
 │  │ Tiering &         │  │ Message Drafting   │  │ Escalation &      │ │
 │  │ Escalation module │◄─┤ module (Claude:    │  │ Resolution module │ │
-│  │ (§3–4, §7)        │  │ drafting calls)     │  │ (§10)             │ │
+│  │ (§3–4, §7)        │  │ drafting calls)     │  │ (§9)             │ │
 │  └────────┬──────────┘  └─────────┬──────────┘  └────────┬─────────┘ │
 │           │                       │                       │          │
 │  ┌────────▼──────────┐  ┌─────────▼──────────┐  ┌─────────▼────────┐ │
 │  │ Audit-Sampling     │  │ Message Dispatch    │  │ Settings module  │ │
-│  │ module (§8, §11)   │  │ module (channel      │  │ (§12)            │ │
+│  │ module (§8, §10)   │  │ module (channel      │  │ (§11)            │ │
 │  │                    │  │ adapter, thin)       │  │                  │ │
 │  └────────────────────┘  └─────────────────────┘  └──────────────────┘ │
 └─────────────────────────────────────────────────────────────────────┘
@@ -89,18 +89,18 @@ internal module boundaries" actually lives, not in network topology:
 |---|---|---|---|
 | **Tiering & Escalation** | Computes tier recommendations (base score × rollout overlay, §3), evaluates the 5 hard-trigger rules (§4) against inbound replies, applies promotion/demotion, writes `TierHistoryEvent`. | Message Drafting module (to invoke hard-trigger *classification*, which is a Claude call) | Classifying "does this reply ask about pricing" is a natural-language judgment call, not a keyword match — it needs an LLM call, but the *rule* (pricing → escalate) is this module's business logic, not the drafting module's. |
 | **Message Drafting** | Owns every Claude API call: drafting outbound copy (tone rules §5) and classifying inbound replies against hard-trigger categories (§4). Persists the request/response pair for audit. Implements the resilience pattern (§7 below). | Nothing else in the domain layer (leaf module) — this is the only place `@anthropic-ai/sdk` is imported | Keeping every Claude call in one module means one place to change model version, one place to enforce the timeout/retry contract, one place to log for cost tracking (ties to Azure doc §8's Claude-call dependency tracking). |
-| **Escalation & Resolution Lifecycle** | Creates `Escalation` records when a hard trigger fires, disables agent-send on that thread, records `Resolution` on close (§10), manages the human-set repeat-escalation link. | Tiering & Escalation (an escalation is a hard-trigger outcome) | An escalation is *caused by* the tiering module's rule evaluation; this module owns what happens *after* that fact, keeping "did a rule fire" separate from "what does closing it look like." |
-| **Audit-Sampling** | Rolls the dice at Tier-1 send time per the configured sample rate (§11), creates `AuditSample` rows, records human fine/concerning verdicts. | Settings module (reads `tier1_audit_sample_rate`) | The rate is admin-configurable; sampling logic shouldn't hardcode it. |
+| **Escalation & Resolution Lifecycle** | Creates `Escalation` records when a hard trigger fires, disables agent-send on that thread, records `Resolution` on close (§9), manages the human-set repeat-escalation link. | Tiering & Escalation (an escalation is a hard-trigger outcome) | An escalation is *caused by* the tiering module's rule evaluation; this module owns what happens *after* that fact, keeping "did a rule fire" separate from "what does closing it look like." |
+| **Audit-Sampling** | Rolls the dice at Tier-1 send time per the configured sample rate (§10), creates `AuditSample` rows, records human fine/concerning verdicts. | Settings module (reads `tier1_audit_sample_rate`) | The rate is admin-configurable; sampling logic shouldn't hardcode it. |
 | **Message Dispatch** | Thin channel adapter — takes an approved or human-authored message body and actually sends it (placeholder: SMTP/Graph). No business logic. | Nothing | Deliberately isolated so channel changes (e.g. Erria switches mail providers) never touch tiering, drafting, or escalation logic. |
-| **Settings** | Owns the three-tier settings model (§12): basic (save-immediately), advanced (two-step confirm), locked (read-only reference). Single source of truth other modules read from. | Nothing (leaf module) | Every other module reads settings, none should own them — otherwise "what's the current sample rate" has more than one answer. |
+| **Settings** | Owns the three-tier settings model (§11): basic (save-immediately), advanced (two-step confirm), locked (read-only reference). Single source of truth other modules read from. | Nothing (leaf module) | Every other module reads settings, none should own them — otherwise "what's the current sample rate" has more than one answer. |
 | **Console API process** | HTTP surface for the SPA: read endpoints (queue, detail, history, settings) and human-action endpoints (approve, reject, edit, resolve, mark-fine/concerning, settings save). Never calls Claude directly. | All domain modules (as a consumer, read-mostly) + enqueues work on the Worker for anything requiring a Claude call or a send | Keeping Console API "thin" (no LLM calls, no long-running work) is what keeps human-facing requests fast and keeps Claude resilience logic in exactly one place (the Drafting module, invoked only from the Worker). |
 | **Orchestration Worker process** | Invokes Message Drafting (new triggers, inbound classification) and Message Dispatch (actual sends); runs the two scheduled jobs. | All domain modules (as the actual executor) | This is where "calling Claude and writing to the database" lives, per the Azure doc's §2 role for the worker — now specified down to which domain modules it calls and in what order (see §5 flows below). |
 
 ## 2. Data model
 
 Grounded directly in the mockup's `DETAIL`, `ESCALATIONS`, `AUDIT`, `RESOLUTIONS`, and `state`
-objects, and in the behavior spec's §3 tiering fields, §10 Resolution record, §11 audit sample,
-and §12 settings.
+objects, and in the behavior spec's §3 tiering fields, §9 Resolution record, §10 audit sample,
+and §11 settings.
 
 ### Entities
 
@@ -179,7 +179,7 @@ one persisted model, because a "draft" is just a `Message` in `pending_review` s
 | `is_followup`, `followup_sequence_number` | bool / int, nullable | spec §5's max-2-followups cadence |
 | `created_at` | timestamptz | |
 
-**Escalation** — spec §4/§10; the mockup's `ESCALATIONS[id]` object, persisted.
+**Escalation** — spec §4/§9; the mockup's `ESCALATIONS[id]` object, persisted.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -191,9 +191,9 @@ one persisted model, because a "draft" is just a `Message` in `pending_review` s
 | `detail` | text | the banner's body copy |
 | `recommended_next_step` | text | agent-suggested handoff text (spec §6's "Internal handoff to human AE") |
 | `recommended_next_step_edited` | text, nullable | human edit, if any |
-| `agent_send_disabled` | bool, default true | spec §10: "once a thread has escalated, agent-send is permanently disabled for it" |
+| `agent_send_disabled` | bool, default true | spec §9: "once a thread has escalated, agent-send is permanently disabled for it" |
 | `status` | enum(`active`,`resolved`) | |
-| `repeat_of_resolution_id` | FK → Resolution, nullable | **human-set only**, never auto-detected (spec §10) |
+| `repeat_of_resolution_id` | FK → Resolution, nullable | **human-set only**, never auto-detected (spec §9) |
 | `created_at`, `resolved_at` | timestamptz | |
 
 `hard_trigger_rule` enum: `pricing_question`, `technical_compliance_question`,
@@ -201,7 +201,7 @@ one persisted model, because a "draft" is just a `Message` in `pending_review` s
 `non_english_language` (spec §7's language-escalation case), `conflicting_signals` (spec §7's
 CRM-conflict case), `classification_uncertain` (this design's resilience fallback — see §4 below).
 
-**Resolution** — spec §10's Resolution record; 1:1 with the `Escalation` it closes.
+**Resolution** — spec §9's Resolution record; 1:1 with the `Escalation` it closes.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -212,7 +212,7 @@ CRM-conflict case), `classification_uncertain` (this design's resilience fallbac
 | `action_taken` | text | free text, e.g. "Sent quote — life-raft servicing + exchange option" |
 | `followup_message_id` | FK → Message, nullable | if a reply was sent as part of closing |
 | `followup_sent_at` | timestamptz, nullable | |
-| `outcome_tag` | enum(`closed_won`,`re_engaged`,`no_response`,`churned`,`closed_no_action`) | fixed enum per spec §10 |
+| `outcome_tag` | enum(`closed_won`,`re_engaged`,`no_response`,`churned`,`closed_no_action`) | fixed enum per spec §9 |
 | `time_to_resolution` | interval | derived: `resolved_at − escalation.created_at` |
 | `resolved_by` | text | |
 | `created_at` | timestamptz | |
@@ -230,7 +230,7 @@ CRM-conflict case), `classification_uncertain` (this design's resilience fallbac
 | `related_message_id` | FK → Message, nullable |
 | `related_escalation_id` | FK → Escalation, nullable |
 
-**AuditSample** — spec §11.
+**AuditSample** — spec §10.
 
 | Field | Type |
 |---|---|
@@ -242,7 +242,7 @@ CRM-conflict case), `classification_uncertain` (this design's resilience fallbac
 | `reviewed_by`, `reviewed_at` | text / timestamptz, nullable |
 | `notes` | text, nullable |
 
-**Setting** — spec §12's basic/advanced fields. A single-row table (no per-user or per-business-unit
+**Setting** — spec §11's basic/advanced fields. A single-row table (no per-user or per-business-unit
 scoping — one business unit, no RBAC per the spec's explicit v1 scope).
 
 | Field | Type | Default |
@@ -255,7 +255,7 @@ scoping — one business unit, no RBAC per the spec's explicit v1 scope).
 | `sentiment_confidence_floor` | enum(`Low`,`Medium`,`High`) | `Medium` |
 | `updated_at` | timestamptz | |
 
-The five locked hard-trigger rules (spec §12) and the rollout-overlay toggle are **not** rows in
+The five locked hard-trigger rules (spec §11) and the rollout-overlay toggle are **not** rows in
 this table — they are constants in the Tiering & Escalation module's code, shown to the Settings
 screen as read-only reference data. Making them DB rows would imply they're editable, which
 contradicts the spec's explicit "engineer-only" classification.
@@ -359,7 +359,7 @@ asynchronously (see flow 2 in §5) so the human-facing request stays fast.
 { "resolutionId": "res_abc123" }  →  { "escalation": { "repeatOfResolutionId": "res_abc123" } }
 ```
 
-**`PATCH /api/accounts/:id/tier`** — manual tier override, resolved per spec §10: resolving an
+**`PATCH /api/accounts/:id/tier`** — manual tier override, resolved per spec §9: resolving an
 escalation never auto-restores tier, so this is the explicit, separate action a human takes if an
 account should move after handling one. Requires a reason; always writes a `TierHistoryEvent`.
 ```json
@@ -467,7 +467,7 @@ this system authored, the user turn is untrusted input, and the two must never m
 }
 ```
 
-The `sentiment_confidence_floor` setting (spec §12) is applied in the Tiering & Escalation module
+The `sentiment_confidence_floor` setting (spec §11) is applied in the Tiering & Escalation module
 *after* this call returns — the classifier reports its own confidence; the module compares it
 against the admin-configured floor to decide whether `negative_sentiment` actually fires. This
 keeps the tunable threshold out of the prompt (which would require a new Claude call per settings
@@ -576,7 +576,7 @@ the system prompt itself, so a per-account detail never invalidates the shared c
    `TierHistoryEvent(promote)`.
 6. If instead `Message.tier_context == 1` (an autonomous send, not this flow's Tier-2 path), the
    **Audit-Sampling module** rolls against `Setting.tier1_audit_sample_rate`; on a hit, creates an
-   `AuditSample` row at send time (spec §11 — "logged into an audit-sample queue at send time").
+   `AuditSample` row at send time (spec §10 — "logged into an audit-sample queue at send time").
 7. The console shows "Approved — sending" then, once the async dispatch confirms, the sent state.
 
 ### Flow 3 — a hard trigger fires mid-conversation and creates an escalation
@@ -610,7 +610,7 @@ the system prompt itself, so a per-account detail never invalidates the shared c
    `outcomeTag`, and (for compose-send) `followupBody`.
 2. Console API creates one **Resolution** row (1:1 with the Escalation), sets
    `Escalation.status = 'resolved'`, `resolved_at = now()`. `time_to_resolution` is derived from
-   `resolved_at − Escalation.created_at` (informational only — spec §10 notes no response SLA is
+   `resolved_at − Escalation.created_at` (informational only — spec §9 notes no response SLA is
    currently policy-set).
 3. If `actionType == 'compose_send'`, the human-authored reply is dispatched via the same Message
    Dispatch module used for approved drafts (it's still just "send an email"; Claude is not
@@ -621,7 +621,7 @@ the system prompt itself, so a per-account detail never invalidates the shared c
    "Is this a repeat of a past issue?" populated from `GET` on this account's prior Resolutions.
 5. The BDR selects the earlier Resolution and confirms → `POST .../escalations/:newEscId/link`
    `{resolutionId}`. Console API sets `Escalation.repeat_of_resolution_id`. This is **entirely
-   human-set** — per spec §10, "don't build this as an automated 'same issue' detector for v1;
+   human-set** — per spec §9, "don't build this as an automated 'same issue' detector for v1;
    reliably matching issues is a judgment call." No Claude call is involved in this step at all.
 6. The UI now shows the repeat-escalation banner, cross-referencing the linked Resolution.
 7. Resolving the escalation (step 2) does not by itself change `Account.current_tier` — see §7. If
@@ -684,7 +684,7 @@ unit-test in isolation), `apps/console-api`, `apps/worker`, sharing `packages/do
 
 ## 7. Resolved: tier restoration after a hard-trigger escalation
 
-Previously an open question; now decided (spec §10). Resolving a hard-trigger escalation — e.g. a
+Previously an open question; now decided (spec §9). Resolving a hard-trigger escalation — e.g. a
 pricing question, which isn't necessarily a negative signal at all — does **not** automatically
 restore the account's pre-escalation tier. Resolving the `Escalation` closes that record only and
 never touches `Account.current_tier`. If the account should move afterward (e.g. back to Tier 2
@@ -699,9 +699,9 @@ was "healthy" or not.
 
 | Not designed here | Where it belongs |
 |---|---|
-| Trigger-detection / ICP-scoring ML pipeline | Assumed upstream input (behavior spec §2, §13) |
+| Trigger-detection / ICP-scoring ML pipeline | Assumed upstream input (behavior spec §2, §12) |
 | Cloud/infra topology, Azure service selection, cost, DR | [Azure solution architecture doc](2026-08-02-azure-solution-architecture.md) |
 | Login/logout UI and OIDC flow mechanics | [Landing/login design brief](../../ideation/open-design-brief-landing-login.md) — Keycloak already decided |
-| RBAC / access control | Behavior spec §12–§13 — deliberately deferred with the settings change log |
+| RBAC / access control | Behavior spec §11–§12 — deliberately deferred with the settings change log |
 | Outbound mail channel implementation (SMTP/Graph/etc.) | Treated as a swappable adapter behind the Message Dispatch module; not specified further |
-| Health-pulse metrics snapshot, business-unit switcher | Behavior spec §13 — explicitly out of scope for v1, not deprioritized |
+| Health-pulse metrics snapshot, business-unit switcher | Behavior spec §12 — explicitly out of scope for v1, not deprioritized |

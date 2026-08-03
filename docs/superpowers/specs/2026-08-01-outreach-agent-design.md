@@ -4,15 +4,15 @@ Status: Draft — pending user review
 Last updated: 2026-08-02
 Scenario grounding: see [`ideation/scenario-research.md`](../../../ideation/scenario-research.md)
 
-**2026-08-02 addition**: sections 10–12 formalize three gaps found during mockup review (v02→v04):
+**2026-08-02 addition**: sections 9–11 formalize three gaps found during mockup review (v02→v04):
 escalation resolution/lifecycle, the Tier 1 audit-sampling mechanic foreshadowed in §8, and
 admin-configurable settings. These cover priorities 1–3 from that review; a health-pulse metrics
 snapshot and a business-unit switcher (priorities 4–5) are confirmed out of scope for v1, not just
 deprioritized. See `ideation/open-design-brief-v4-settings-audit.md` for that round's UI brief.
 
 **2026-08-02, later same day**: v05 mockup review found the Settings/Send Audit/repeat-escalation
-implementation fully consistent with §10–12 (no bugs), plus four UX fixes and one scope decision:
-the settings change log is cut for v1 (§12), and access control for Settings is explicitly
+implementation fully consistent with §9–11 (no bugs), plus four UX fixes and one scope decision:
+the settings change log is cut for v1 (§11), and access control for Settings is explicitly
 deferred alongside it, not addressed separately. See `ideation/open-design-brief-v5-fixes.md`.
 
 ## 1. Purpose and scope
@@ -61,7 +61,65 @@ on day one, with no track record to justify that trust. So:
 
 This means Tier 1 is *earned*, not assigned — a deliberate, conservative choice appropriate to a
 two-person team introducing AI outreach into a business that has never had it, rather than an
-engineering nicety.
+engineering nicety. It is also the **only** route to Tier 1: a human can move an account to Tier 2
+or Tier 3 by hand, but cannot grant Tier 1, because handing out the standing an account is supposed
+to prove would defeat the overlay's entire purpose.
+
+### What "sends autonomously" actually permits
+
+Tier 1 grants the agent *permission* to send without review — not an obligation to. Five conditions
+must all hold at the moment of sending; if any fails, that **one message** drafts and waits for
+approval instead, and the account keeps its earned tier. (The same mechanic §4 rule 5 already uses:
+a cap on a message, not a judgment about an account.)
+
+| Condition | If it fails |
+|---|---|
+| Autonomous sending is switched on org-wide | message waits for approval |
+| No open escalation on the account | message waits for approval |
+| The message doesn't cite a vessel's compliance deadline (rule 5) | message waits for approval |
+| The draft's own confidence is *high*, not merely acceptable | message waits for approval |
+| A contact address exists | flagged for human triage — nothing to approve |
+
+The confidence condition is the one worth dwelling on. On a Tier 2 account a middling draft is
+harmless, because a human reads it either way. On a Tier 1 account it would reach a customer unread.
+Requiring the agent's *own* confidence to be high before it sends unsupervised is the cheapest
+safeguard available, and it costs nothing when the agent is right.
+
+**A switch stops all autonomous sending at once.** Pausing takes effect immediately, with no
+confirmation step — an emergency stop that asks "are you sure?" is a worse emergency stop. Resuming
+does require confirmation, because resuming is the direction that can cause harm. While paused, the
+system degrades to Tier 2 behavior rather than halting: accounts keep their tiers and their messages
+simply queue for approval. The switch starts **off**; autonomy is turned on deliberately, once.
+
+### What a demotion costs
+
+§3's demotion rule handles the incident. This handles the *earned progress*, which is a separate
+question: without a rule, an account with four clean approvals that draws a complaint, drops to
+Tier 3, and is later restored by hand would re-qualify for Tier 1 on its very next clean message —
+the complaint would have cost it nothing durable.
+
+So the clean-approval count resets to zero, but **only when the escalation indicates damaged trust**:
+a complaint, opt-out, or factual correction, or evidence the agent contacted someone it shouldn't
+have. It does *not* reset for a pricing question, a technical question, a reply in another language,
+or a case the classifier simply couldn't call. Those are healthy or neutral signals — §9 makes the
+point that a pricing question is a buying signal — and zeroing an account's progress for asking
+about price would punish precisely the behavior Erria wants. Either way the tier history records
+which happened, so "escalated, progress kept" is distinguishable from "escalated, progress lost."
+
+### Follow-ups sent autonomously
+
+§5 allows at most two follow-ups, each **adding new information**. A Tier 1 follow-up therefore sends
+only when something genuinely new exists to say — a new trigger, corrected vessel particulars, an
+updated account picture. When there is nothing new, the sequence simply **ends**: no message, and no
+human asked to write filler either.
+
+Whether something new exists is a question about data, and is answered from the record rather than
+by the agent's own judgment. The agent is never asked "do you have anything new to say?" — a
+drafting agent has every incentive to answer yes, and answering it wrongly produces exactly the bare
+"just checking in" that §5 forbids. The agent is told *which* facts are new, and writes about those.
+
+The full mechanics are designed in
+[`2026-08-03-autonomous-send-design.md`](2026-08-03-autonomous-send-design.md).
 
 ## 4. Hard escalation triggers (override tier, always)
 
@@ -180,14 +238,15 @@ outcome here, so the agent drafts and a human reviews before sending.
 
 ## 8. Evaluation approach
 
-- **Pre-send review sampling**: even at Tier 1, a fixed percentage of autonomous sends are
+- **Retrospective send sampling**: even at Tier 1, a fixed percentage of autonomous sends are
   logged for retrospective human spot-check (not blocking, but tracked) to catch tone drift early.
+  Sampling never gates a send — gating would defeat the purpose of Tier 1 autonomy (see §10).
 - **Track edit rate on Tier 2 drafts** as the core promotion signal — not just "was it sent," but
   "was it sent unedited."
 - **Track escalation-trigger firing rates** by category — a rule that never fires may be
   miscalibrated; a rule firing constantly may indicate the tiering score upstream is too generous.
 
-## 10. Escalation resolution & lifecycle
+## 9. Escalation resolution & lifecycle
 
 The original design specified what fires a hard escalation (§4) but not what closing one looks
 like or what gets recorded — mockup review surfaced this as the single most-corroborated gap.
@@ -208,7 +267,7 @@ This section formalizes it.
 - **Outcome tag** — a fixed enum (closed-won / re-engaged / no-response / churned /
   closed-no-action), not free text, so outcomes are reportable later
 - **Time-to-resolution**, from escalation time to resolution time, shown against a response SLA if
-  one is set (see §12 — no SLA is currently policy-set, so this is informational, not a compliance
+  one is set (see §11 — no SLA is currently policy-set, so this is informational, not a compliance
   measure, until that decision is made)
 
 **Resolving a hard-trigger escalation does not automatically restore the account's prior tier.**
@@ -224,6 +283,13 @@ This is logged as its own `TierHistoryEvent` entry, the same way every other tie
 manual override is auditable and never a silent edit — consistent with tiers being "earned/justified,
 not arbitrary" (§3). Automatic tier-recovery logic is deliberately not built for v1.
 
+**A manual tier change can move an account to Tier 2 or Tier 3 — never to Tier 1.** Tier 1 means the
+agent sends without a human reading the message first, and §3 makes that standing something an
+account *earns* by demonstrating a clean record. A control that lets an operator grant it by picking
+it from a list would hand out exactly the trust the rollout overlay exists to make accounts prove.
+So the manual override is a way to hold an account back, or to release one that was held — not a way
+to promote it.
+
 **Repeat-escalation flag:** if an account has a prior Resolution record whose underlying issue
 plausibly matches a new escalation (e.g. a billing dispute resurfacing after an earlier AE
 handoff), the new escalation should be marked as a **repeat escalation on the same issue** rather
@@ -238,13 +304,13 @@ specific other tab (e.g. "closing an escalation on the Draft review tab") — wh
 close action depends on the account's current state. Use tab-state-agnostic language instead, e.g.
 "Closing an active escalation logs a record here."
 
-## 11. Tier 1 audit-sampling
+## 10. Tier 1 audit-sampling
 
 §8 already called for "a fixed percentage of autonomous sends... logged for retrospective human
 spot-check" — this section specifies the actual mechanic, since the original spec named the need
 without designing it.
 
-- A fixed percentage (default **10%**, adjustable per §12) of Tier 1 autonomous sends are
+- A fixed percentage (default **10%**, adjustable per §11) of Tier 1 autonomous sends are
   automatically logged into an **audit-sample queue** at send time, not triggered by a complaint.
 - This is retrospective and non-blocking: the message has already sent by the time a human reviews
   it. Sampling exists to catch tone drift early across many sends, not to gate any individual Tier
@@ -253,12 +319,22 @@ without designing it.
   **not** by itself demote the account — only a real negative signal per §3 does that — but it
   creates a record the team can look for patterns across (e.g. one trigger type or message
   template repeatedly flagged).
-- The sample rate, and which Tier 1 sends are eligible for sampling (e.g. excluding the
-  highest-tenure accounts once they have a long clean history), are admin-configurable — see §12.
+- The sample rate is admin-configurable — see §11. *Which* Tier 1 sends are eligible for sampling
+  at all (e.g. excluding the highest-tenure accounts once they have a long clean history) is
+  deliberately deferred, and listed as such in §11: uniform sampling is the right default until
+  there are enough Tier 1 accounts for sampling all of them to be wasteful.
 
-## 12. Admin-configurable settings
+## 11. Admin-configurable settings
 
 Settings are deliberately split by risk rather than offered as one undifferentiated list:
+
+**The autonomous-sending switch sits outside this split, deliberately** (§3). It is the one control
+whose two directions carry opposite risk, so it gets opposite treatment: **pausing is immediate and
+unconfirmed**, because an emergency stop that interrogates you is a worse emergency stop, while
+**resuming takes the confirmation step**. Filing it under one risk class would force the wrong
+behavior on one of its two directions. It starts off, and pausing records a short reason so whoever
+finds the system paused can see why without having to ask — operational state, not the settings
+change log deferred below.
 
 **Freely adjustable, no confirmation needed:**
 - Tier 1 promotion threshold — clean approvals required before Tier 1 (integer, 1–4, default 2)
@@ -278,6 +354,15 @@ Settings are deliberately split by risk rather than offered as one undifferentia
 
 **Deferred, not v1:**
 - ICP fit scoring weights — needs real usage data to tune responsibly before it's exposed at all.
+- **Audit-sample eligibility rules** (§10) — *which* Tier 1 sends are eligible for sampling, as
+  opposed to what percentage of them. Sampling everything uniformly is the honest default while
+  Tier 1 is rare; carving out exemptions before there's volume to justify them would be tuning
+  against imagined data.
+- **An escalation response SLA.** §9 records time-to-resolution on every closed escalation, and
+  deliberately reports it as information rather than as a measure against a target: with no
+  historical data on how long these actually take, any number set now would be invented. Once
+  there are enough closed escalations to see the real distribution, a target becomes a decision
+  worth making — and this is where it would be configured.
 - **A settings change log.** v04's mockup included one (who/what/when/old→new), but on review this
   was cut for v1: a change log only means something once there's also a concept of *who* is allowed
   to change settings, and this design deliberately isn't building access control yet either (a
@@ -286,17 +371,17 @@ Settings are deliberately split by risk rather than offered as one undifferentia
   both together — not the log alone — if the team grows past two people or introduces role
   separation.
 
-## 13. Explicit non-goals
+## 12. Explicit non-goals
 
 - This design does not specify the trigger-detection or ICP-scoring ML pipeline.
 - This design does not cover the human-review/escalation console UI (see the separate Open Design
   briefs for that, including `ideation/open-design-brief-v4-settings-audit.md` and
   `ideation/open-design-brief-v5-fixes.md` for the settings and audit-sampling screens specified in
-  §11–12).
+  §10–11).
 - A health-pulse metrics snapshot and a business-unit switcher (raised during mockup review as
   lower-priority findings) are intentionally not designed here, and are explicitly out of scope for
   the first version of the outreach agent, not just deprioritized.
-- Access control / RBAC for the Settings screen is intentionally not designed here — see §12's note
+- Access control / RBAC for the Settings screen is intentionally not designed here — see §11's note
   on why the change log was cut alongside it, not independently.
 - Numeric SOLAS recertification intervals used anywhere in supporting materials are illustrative,
   not asserted as verified facts (see `scenario-research.md`).
