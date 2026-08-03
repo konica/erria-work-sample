@@ -91,6 +91,12 @@ cp .env.example .env
 # edit .env: set DATABASE_URL to a real Postgres connection string and ANTHROPIC_API_KEY
 ```
 
+Either order works. `pnpm install` runs `prisma generate` through `packages/db`'s `postinstall`,
+and that step deliberately does **not** require `DATABASE_URL` — `generate` never connects to a
+database, so a fresh clone installs cleanly before any `.env` exists (see the comment in
+`packages/db/prisma.config.ts`). The commands that do connect need it: `prisma migrate deploy`
+below, and running either app.
+
 `.env.example` documents the environment variables the apps read:
 
 | Variable | Used by | Notes |
@@ -117,19 +123,38 @@ pnpm --filter @erria/db exec prisma migrate deploy
 
 ## Running the apps
 
+Two things the `dev` scripts do not do for you.
+
+**Build the workspace packages first.** `dev` is `tsx watch`, which does not build dependencies,
+and `@erria/db` resolves through its `main` field to `dist/index.js`. Until that is compiled,
+`console-api` dies at boot with `ERR_MODULE_NOT_FOUND` for `@erria/db/dist/index.js`:
+
 ```bash
+pnpm build   # or, minimally: pnpm --filter @erria/db build
+```
+
+Only `console-api` imports `@erria/db` today, so the worker starts without this — but it declares
+the dependency, so build both.
+
+**Export the variables from `.env` yourself.** Neither app loads `.env`: both read `process.env`
+directly and throw `Missing required environment variable DATABASE_URL` at boot without it (only
+`prisma.config.ts` calls `dotenv`). Export the file into your shell first:
+
+```bash
+set -a && . ./.env && set +a
 pnpm --filter console-api dev   # NestJS app with reload, http://localhost:3000
 pnpm --filter worker dev        # Fastify app with reload, http://localhost:3100
 ```
 
-Each exposes a health check once `DATABASE_URL` is set:
+Each then exposes a health check:
 
 ```bash
 curl http://localhost:3000/health   # { "status": "ok" }
 curl http://localhost:3100/health   # { "status": "ok" }
 ```
 
-The worker also accepts a one-shot job invocation instead of starting the server:
+The worker also accepts a one-shot job invocation instead of starting the server. This path runs
+before the `DATABASE_URL` check, so it needs neither the database nor the exported environment:
 
 ```bash
 pnpm --filter worker exec tsx src/main.ts --job=followup-cadence
