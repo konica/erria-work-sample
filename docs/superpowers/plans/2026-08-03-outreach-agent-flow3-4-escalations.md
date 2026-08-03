@@ -11,7 +11,7 @@ repeat, and separately changing the account's tier by hand if they judge it shou
 **Architecture:** Continues Plans 1 and 2 — same monorepo, same two processes. The Console API
 persists the inbound reply and every human decision; the Worker owns the Claude classification call
 and the escalation it produces. This is Plan 3 of 4. Grounded in
-`docs/superpowers/specs/2026-08-01-outreach-agent-design.md` §4, §7 and §10,
+`docs/superpowers/specs/2026-08-01-outreach-agent-design.md` §4, §7 and §9,
 `docs/architecture/2026-08-02-application-architecture.md` §4.3 and §5 Flows 3-4, and the v07
 mockup's escalation banner, resolution controls, repeat-link selector, and Change-tier panel.
 
@@ -41,19 +41,19 @@ enum value — see Task 4 and the self-review note explaining why the schema nee
 - **A hard trigger overrides tier, always** (spec §4). Opening an Escalation sets
   `Account.currentTier = 3` regardless of the account's prior tier, and writes
   `TierHistoryEvent(escalate)`.
-- **Agent-send is permanently disabled on an escalated thread** (spec §10). `agentSendDisabled`
+- **Agent-send is permanently disabled on an escalated thread** (spec §9). `agentSendDisabled`
   defaults true on the Escalation, and Plan 2's approve and dispatch guards already read it.
-- **Resolving an Escalation never changes `Account.currentTier`** (spec §10, ADR-0003's sibling
+- **Resolving an Escalation never changes `Account.currentTier`** (spec §9, ADR-0003's sibling
   reasoning). It closes that record only. Moving the account is a separate, explicit human action —
   Task 8.
-- **The repeat-escalation link is human-set, never inferred** (spec §10: "Don't build this as an
+- **The repeat-escalation link is human-set, never inferred** (spec §9: "Don't build this as an
   automated 'same issue' detector for v1"). No Claude call, no heuristic, no string matching is
   involved in Task 7.
 - **Manual tier override offers Tier 2 and Tier 3 only** ([ADR-0004](../../adr/0004-tier-1-is-earned-never-set-manually.md)).
   Tier 1 is earned via Clean Approvals, never granted by hand. The endpoint rejects `tier: 1`.
 - **Outcome tags are a fixed enum**, matching the mockup's `OUTCOMES` exactly:
   `closed_won`, `re_engaged`, `no_response`, `churned`, `closed_no_action`.
-- **UI copy must not name a specific tab** when describing where the close action lives (spec §10's
+- **UI copy must not name a specific tab** when describing where the close action lives (spec §9's
   "Content correction"). Use tab-state-agnostic wording.
 
 ---
@@ -559,7 +559,7 @@ export function decideHardTrigger(
     return { fires: false, rule: null, reasonSummary: '', detail: '' };
   }
 
-  // The confidence floor is a signal-detection threshold on sentiment specifically (spec §12) —
+  // The confidence floor is a signal-detection threshold on sentiment specifically (spec §11) —
   // it tunes precision on the one rule that is a judgment call, not the rules that are factual.
   if (
     rule === 'negative_sentiment' &&
@@ -1710,7 +1710,7 @@ describe('EscalationsService', () => {
     expect(stored.followupMessageId).toBeNull();
   });
 
-  it('never changes the account tier when resolving (spec §10)', async () => {
+  it('never changes the account tier when resolving (spec §9)', async () => {
     const { account, escalation } = await seedActiveEscalation();
     const service = new EscalationsService(testDb.prisma, { dispatchMessage: async () => {} } as never);
 
@@ -1892,7 +1892,7 @@ export class EscalationsService {
         },
       });
 
-      // Spec §10: closes this record only. Account.currentTier is deliberately untouched.
+      // Spec §9: closes this record only. Account.currentTier is deliberately untouched.
       const updated = await tx.escalation.update({
         where: { id: escalation.id },
         data: { status: 'resolved', resolvedAt: new Date() },
@@ -1918,7 +1918,7 @@ export class EscalationsService {
   }
 }
 
-/** Informational only — spec §10 notes no response SLA is currently policy-set. */
+/** Informational only — spec §9 notes no response SLA is currently policy-set. */
 function formatDuration(ms: number): string {
   const hours = Math.floor(ms / 3_600_000);
   const days = Math.floor(hours / 24);
@@ -2141,7 +2141,7 @@ Add to `EscalationsService`:
 
 ```ts
   /**
-   * Spec §10: human-set only. No matching heuristic, no Claude call — "reliably matching issues is
+   * Spec §9: human-set only. No matching heuristic, no Claude call — "reliably matching issues is
    * a judgment call, not a deterministic match."
    */
   async link(accountId: string, escalationId: string, resolutionId: string) {

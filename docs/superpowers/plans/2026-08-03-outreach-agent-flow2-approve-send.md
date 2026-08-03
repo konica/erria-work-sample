@@ -47,7 +47,7 @@ tables; the entire schema was created in Plan 1 Task 2.
   the decision").
 - **Sends are idempotent by message.** A message already `sent` is never sent twice, no matter how
   many times dispatch is invoked — the reconciliation sweep in Task 8 depends on this.
-- **Escalated threads never send agent-authored messages** (spec §10). Both the approve path and the
+- **Escalated threads never send agent-authored messages** (spec §9). Both the approve path and the
   dispatch path check for an active Escalation with `agentSendDisabled` before proceeding. No
   Escalation rows exist until Plan 3, so these queries return empty today — they are written now
   because retrofitting a safety check after the thing it guards against exists is the wrong order.
@@ -857,7 +857,7 @@ Add to `apps/console-api/src/messages/messages.service.ts`:
   }
 
   /**
-   * Spec §10: once a thread has escalated, agent-send is permanently disabled for it. No Escalation
+   * Spec §9: once a thread has escalated, agent-send is permanently disabled for it. No Escalation
    * rows exist until Plan 3, so this returns without objection today — it is written now because a
    * send guard added after the sends exist is a guard that was missing when it mattered.
    */

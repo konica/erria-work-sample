@@ -3,6 +3,18 @@
 **Reviewer:** Product Manager (spec drift analysis)  
 **Status:** Draft findings — all quotes verified for grep-able accuracy
 
+> **Note added after this review was acted on.** Section numbers in this report refer to the spec
+> **as it stood at review time**, when it skipped §9 and ran 1–8 then 10–13. That numbering defect
+> was one of the things the review prompted, and the spec has since been renumbered to run 1–12:
+> old §10→§9 (escalation resolution), §11→§10 (audit-sampling), §12→§11 (settings), §13→§12
+> (non-goals). This report is left at the old numbering deliberately, as a point-in-time record.
+>
+> Disposition of its findings: **1.1 accepted and fixed**; **4.1 accepted and fixed**;
+> **5.1 rejected** — the proposed rewording traded the original's conviction for hedging, which is
+> the wrong trade in a document graded on directness. Two further findings the review did not catch
+> were found and fixed separately: the missing §9, and §10's silence on which tiers a manual
+> override may reach (ADR-0004).
+
 ---
 
 ## Overview
