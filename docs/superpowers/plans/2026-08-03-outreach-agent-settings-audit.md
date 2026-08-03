@@ -10,7 +10,7 @@ writing events into.
 
 **Architecture:** Continues Plans 1-3. This plan is almost entirely Console API and console
 frontend — it adds no Claude calls, no worker routes, and no scheduled jobs. This is Plan 4 of 4.
-Grounded in `docs/superpowers/specs/2026-08-01-outreach-agent-design.md` §11 and §12,
+Grounded in `docs/superpowers/specs/2026-08-01-outreach-agent-design.md` §10 and §11,
 `docs/architecture/2026-08-02-application-architecture.md` §2-§3, and the v07 mockup's Settings,
 Send Audit, and Tier History screens.
 
@@ -22,7 +22,7 @@ Send Audit, and Tier History screens.
 ## Global Constraints
 
 - **Node.js >=24**, TypeScript `strict: true`, pnpm workspaces — unchanged.
-- **Settings are split into three risk classes** (spec §12), and the split is the point — do not
+- **Settings are split into three risk classes** (spec §11), and the split is the point — do not
   collapse them into one undifferentiated form:
   - **Freely adjustable, saves immediately:** `tier1PromotionThreshold` (integer 1-4, default 2),
     `tier1AuditSampleRate` (percent, default 10).
@@ -35,18 +35,18 @@ Send Audit, and Tier History screens.
   "Making them DB rows would imply they're editable, which contradicts the spec's explicit
   'engineer-only' classification"). They are served read-only so the UI can display them.
 - **The confirmation copy must state that a change applies going forward, not retroactively**
-  (spec §12).
+  (spec §11).
 - **The confirmation must show the actual diff** — each changed field with its old and new value.
   A confirmation step that does not say what is changing is a speed bump, not a safeguard.
-- **There is no settings change log** (spec §13). It was deliberately cut together with access
+- **There is no settings change log** (spec §12). It was deliberately cut together with access
   control: "Logging changes without that distinction gives an appearance of accountability the
   system can't actually back up." Do not add one, and do not add a `changedBy` field.
-- **A "concerning" audit verdict never demotes the account** (spec §11). It records a pattern for
+- **A "concerning" audit verdict never demotes the account** (spec §10). It records a pattern for
   humans to spot; only a real negative signal changes tier, and that path is Plan 3's.
-- **Audit review is retrospective and non-blocking** (spec §11) — the message has already sent by
+- **Audit review is retrospective and non-blocking** (spec §10) — the message has already sent by
   the time anyone reviews it. Nothing in this plan gates a send.
 - **Known and stated: `AuditSample` rows have no producer yet.** Sampling fires only on Tier 1
-  autonomous sends (spec §11), which do not exist ([ADR-0002](../../adr/0002-tier-1-autonomous-send-deferred.md),
+  autonomous sends (spec §10), which do not exist ([ADR-0002](../../adr/0002-tier-1-autonomous-send-deferred.md),
   [ADR-0005](../../adr/0005-clean-approvals-counted-promotion-action-deferred.md)). The Send Audit
   screen is therefore built and tested against **seeded** rows and cannot be demonstrated end to
   end until autonomous send ships. This is a known consequence, not an oversight — see the
@@ -77,7 +77,7 @@ Send Audit, and Tier History screens.
 
 ```ts
 /**
- * Spec §12's "locked, engineer-only" tier. Deliberately constants, not `Setting` columns: storing
+ * Spec §11's "locked, engineer-only" tier. Deliberately constants, not `Setting` columns: storing
  * them in the database would imply an admin can change them, which is exactly the implication the
  * spec rules out. Served read-only so the Settings screen can show what the policy is.
  */
@@ -235,7 +235,7 @@ export class SettingsService {
     return this.present(updated);
   }
 
-  /** Defaults live here and in the Prisma schema's @default — spec §12's stated values. */
+  /** Defaults live here and in the Prisma schema's @default — spec §11's stated values. */
   private async ensureRow() {
     return this.prisma.setting.upsert({
       where: { id: SETTINGS_ID },
@@ -466,7 +466,7 @@ Add to `SettingsService`:
     return {
       requiresConfirmation: diff.length > 0,
       diff,
-      // Spec §12: the confirmation copy must say a change is not retroactive.
+      // Spec §11: the confirmation copy must say a change is not retroactive.
       notice: 'These changes apply to outreach going forward. Messages already sent are unaffected.',
     };
   }
@@ -607,7 +607,7 @@ describe('AuditService', () => {
     expect(result.items.every((item) => item.reviewStatus === 'fine')).toBe(true);
   });
 
-  it('marks a sample concerning without changing the account tier (spec §11)', async () => {
+  it('marks a sample concerning without changing the account tier (spec §10)', async () => {
     const { account, sample } = await seedAuditSample();
     const service = new AuditService(testDb.prisma);
 
@@ -708,7 +708,7 @@ export class AuditService {
   }
 
   /**
-   * Spec §11: a concerning flag records a pattern; it never demotes the account on its own. Only a
+   * Spec §10: a concerning flag records a pattern; it never demotes the account on its own. Only a
    * real negative signal changes tier, and that path runs through Escalation (Plan 3).
    */
   async mark(auditSampleId: string, verdict: 'fine' | 'concerning') {
@@ -1654,10 +1654,10 @@ git commit -m "feat(console-web): tier history timeline with manual-override tag
 
 ## Self-Review Notes (from writing this plan)
 
-- **Spec coverage:** §11's sampling mechanic → Task 3 (review side) with creation deliberately
-  absent, see below; §11's "concerning does not demote" → Task 3's third test; §12's three risk
-  classes → Tasks 1, 2, and 5; §12's "applies going forward, not retroactively" → Task 2's `notice`
-  and Task 5's test; §13's deferred change log → deliberately not built, stated in Global
+- **Spec coverage:** §10's sampling mechanic → Task 3 (review side) with creation deliberately
+  absent, see below; §10's "concerning does not demote" → Task 3's third test; §11's three risk
+  classes → Tasks 1, 2, and 5; §11's "applies going forward, not retroactively" → Task 2's `notice`
+  and Task 5's test; §12's deferred change log → deliberately not built, stated in Global
   Constraints.
 - **The Send Audit screen has no live data source, and this plan does not pretend otherwise.**
   Sampling fires only on Tier 1 autonomous sends (ADR-0002/ADR-0005), so Task 3 tests against
@@ -1667,7 +1667,7 @@ git commit -m "feat(console-web): tier history timeline with manual-override tag
 - **Locked settings are constants, not rows** — following architecture §2 exactly. Task 5's first
   test asserts the locked section contains zero interactive elements, so a future well-meaning
   change that adds an input there fails a test rather than quietly shipping.
-- **No settings change log, deliberately.** Spec §13 cut it together with access control. Task 1's
+- **No settings change log, deliberately.** Spec §12 cut it together with access control. Task 1's
   `present()` returns no `changedBy`, and no task adds one.
 - **Type consistency check:** `SettingsPayload.advanced.sentimentConfidenceFloor` matches Plan 3's
   `DecisionSettings.sentimentConfidenceFloor` (`'Low' | 'Medium' | 'High'`) and the Prisma
