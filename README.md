@@ -43,9 +43,6 @@ built yet. See [Status](#status) below for exactly what is and isn't implemented
   tiered, drafted message, and no hard-trigger escalation exists. The worker never calls
   `@erria/domain`.
 - No CI workflow is configured in this checkout.
-- The documented dev workflow cannot serve the `/api/*` endpoints — see
-  [#35](https://github.com/konica/erria-work-sample/issues/35) and the note under
-  [Running the apps](#running-the-apps).
 
 This covers the "foundation" slice of Plan 1 (see
 [`docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md`](docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md))
@@ -145,7 +142,7 @@ that file automatically — and update `DATABASE_URL` to match.
 
 Two things the `dev` scripts do not do for you.
 
-**Build the workspace packages first.** `dev` is `tsx watch`, which does not build dependencies,
+**Build the workspace packages first.** `dev` is a watcher, not a build, so it does not build dependencies,
 and `@erria/db` resolves through its `main` field to `dist/index.js`. Until that is compiled,
 `console-api` dies at boot with `ERR_MODULE_NOT_FOUND` for `@erria/db/dist/index.js`:
 
@@ -180,22 +177,21 @@ curl http://localhost:3000/api/queue          # { "items": [], "total": 0, "page
 curl http://localhost:3000/api/accounts/<id>  # 404 when the account does not exist
 ```
 
-> **Known issue — these two return 500 under `dev`.** `tsx` compiles through esbuild, which does
-> not emit the `emitDecoratorMetadata` reflection data NestJS needs to resolve constructor
-> parameters, so every injected service arrives as `undefined`. `/health` is unaffected because its
-> controller has no dependencies. Until
-> [#35](https://github.com/konica/erria-work-sample/issues/35) is fixed, run the compiled build to
-> exercise the `/api/*` endpoints:
->
-> ```bash
-> pnpm build && pnpm --filter console-api start   # node dist/main.js — tsc does emit the metadata
-> ```
+Both `dev` scripts run `node --watch --import @swc-node/register/esm-register`. SWC rather than
+esbuild is deliberate and load-bearing, not a preference: NestJS resolves implicit constructor
+parameters (`private readonly x: XService`, with no `@Inject` token) from `design:paramtypes`
+metadata, and esbuild cannot emit it regardless of `emitDecoratorMetadata` in `tsconfig.json`. Under
+an esbuild-based runner every injected dependency silently arrives as `undefined`: the app boots,
+logs its mapped routes, and then 500s on the first request to any endpoint with a dependency. That
+was [#35](https://github.com/konica/erria-work-sample/issues/35). `apps/console-api`'s Vitest config
+uses `unplugin-swc` for the same reason, and `src/controller-injection.spec.ts` guards against a
+regression.
 
 The worker also accepts a one-shot job invocation instead of starting the server. This path runs
 before the `DATABASE_URL` check, so it needs neither the database nor the exported environment:
 
 ```bash
-pnpm --filter worker exec tsx src/main.ts --job=followup-cadence
+pnpm --filter worker exec node --import @swc-node/register/esm-register src/main.ts --job=followup-cadence
 # [stub] job "followup-cadence" invoked — no-op until a later plan implements it
 ```
 

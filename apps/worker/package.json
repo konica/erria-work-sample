@@ -6,20 +6,22 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "dev": "tsx watch src/main.ts",
+    "dev": "node --watch --import @swc-node/register/esm-register src/main.ts",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "fastify": "^5.2.0",
     "@anthropic-ai/sdk": "^0.115.0",
-    "@erria/db": "workspace:*"
+    "@erria/db": "workspace:*",
+    "fastify": "^5.2.0"
   },
   "devDependencies": {
+    "@swc-node/register": "^1.12.1",
+    "@swc/core": "^1.15.47",
+    "@types/node": "^24.0.0",
     "tsx": "^4.19.0",
-    "vitest": "^3.0.0",
     "typescript": "^5.7.0",
-    "@types/node": "^24.0.0"
+    "vitest": "^3.0.0"
   }
 }
