@@ -190,9 +190,21 @@ No new tables.
 | `Setting` | `autonomousSendingEnabled` (bool, default **false**) | The kill switch. Off until deliberately enabled. |
 | `Setting` | `autonomousPauseReason` (text, nullable) | Why it is currently paused. Cleared on resume. |
 | `Trigger.status` | new value `sequence_ended` | The follow-up sequence found nothing new and stopped. |
-| `Message.hardRuleFlags` | new values `low_confidence_hold`, `autonomous_paused_hold` | Which gate held a message, alongside the existing rule-5 flag. |
+| `Trigger` | `hasComplianceDeadlineContent` (bool, default false) | Gate 3 needs to read this per message. It arrives on the incoming-trigger payload but was never persisted, so the gate had nothing to check. |
+| `Vessel` | `createdAt`, `updatedAt` | Required by §5's vessel fact source. `Vessel` had no timestamps at all, so "a changed vessel record" was undetectable. |
+| `Account` | `relationshipSummaryUpdatedAt` (timestamptz, nullable) | Required by §5's relationship fact source, and **not** substitutable with `Account.updatedAt` — see below. |
+| `Message.hardRuleFlags` | new values `low_confidence_hold`, `autonomous_paused_hold`, `escalation_hold` | Which gate held a message, alongside the existing rule-5 flag. |
 
 `AuditSample` needs no change — its rows finally get a producer.
+
+**Why `relationshipSummaryUpdatedAt` rather than `Account.updatedAt`:** `updatedAt` moves on *any*
+write to the account, including a tier change. Using it as a fact source would mean every promotion,
+demotion, or manual override manufactured "new information" and triggered a follow-up about nothing —
+the exact outcome §5 forbids, produced by the mechanism meant to prevent it. A dedicated column moves
+only when the summary text actually changes.
+
+The last four rows here were found while writing the implementation plan rather than during design;
+without them §5's fact sources are unimplementable as written.
 
 ## 8. Error handling
 
