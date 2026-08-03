@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { startTestPostgres, stopTestPostgres, type TestPostgres } from '@erria/db';
+import { startTestPostgres, stopTestPostgres, type TestPostgres } from '@erria/db/test-utils';
 import { AccountsService } from './accounts.service.js';
 
 describe('AccountsService', () => {
