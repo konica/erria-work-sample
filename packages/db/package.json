@@ -6,6 +6,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
+    "postinstall": "prisma generate",
     "build": "prisma generate && tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -19,6 +20,7 @@
   "devDependencies": {
     "prisma": "^7.0.0",
     "@types/pg": "^8.11.0",
+    "@types/node": "^24.0.0",
     "@testcontainers/postgresql": "^11.0.0",
     "vitest": "^3.0.0",
     "typescript": "^5.7.0",
