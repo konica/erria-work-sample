@@ -24,9 +24,12 @@ built yet. See [Status](#status) below for exactly what is and isn't implemented
   `Message`, `Escalation`, `Resolution`, `TierHistoryEvent`, `AuditSample`, `Setting`, `LlmCall`)
   targeting PostgreSQL, with an applied migration and a Testcontainers-backed integration test
   that proves a fresh Postgres can be migrated and queried through the generated client.
+- `packages/domain` (`@erria/domain`): framework-free business logic — `recommendTierForTrigger`
+  (spec §3/§4 tier recommendations) and message drafting (`draftMessage`, its Zod output schema,
+  and the tone system prompt). No framework imports, so it is testable without booting either app.
 - `apps/console-api`: a NestJS app that boots, validates `DATABASE_URL` at startup, and exposes
-  `GET /health`. Includes a global `PrismaModule` (a `PRISMA` DI token) for later feature modules
-  to build on.
+  `GET /health`, `GET /api/queue` and `GET /api/accounts/:id`. Includes a global `PrismaModule`
+  (a `PRISMA` DI token) that feature modules build on.
 - `apps/worker`: a standalone Fastify server that boots, validates `DATABASE_URL`, and exposes
   `GET /health`, plus a `--job=<name>` CLI entrypoint stub (`followup-cadence`,
   `audit-sample-maintenance`, `stuck-send-reconciliation`) that validates the job name and
@@ -34,17 +37,20 @@ built yet. See [Status](#status) below for exactly what is and isn't implemented
 
 **Not yet built:**
 
-- `packages/domain` and `apps/console-web` are empty placeholder directories (no source, no
-  `package.json`) reserved for the framework-free business-logic package and the console frontend
-  respectively.
-- No drafting, tiering, or hard-trigger escalation logic exists yet — both services currently do
-  nothing but health-check.
+- `apps/console-web` is an empty placeholder directory (no source, no `package.json`) reserved for
+  the console frontend.
+- Nothing orchestrates the domain modules yet: no end-to-end flow turns an incoming trigger into a
+  tiered, drafted message, and no hard-trigger escalation exists. The worker never calls
+  `@erria/domain`.
 - No CI workflow is configured in this checkout.
+- The documented dev workflow cannot serve the `/api/*` endpoints — see
+  [#35](https://github.com/konica/erria-work-sample/issues/35) and the note under
+  [Running the apps](#running-the-apps).
 
-This corresponds to Tasks 1–4 of Plan 1 (see
-[`docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md`](docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md)),
-the "foundation" slice that precedes Flow 1 ("a trigger arrives and becomes a Tier 2 draft
-awaiting approval").
+This covers the "foundation" slice of Plan 1 (see
+[`docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md`](docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md))
+plus the tiering, drafting, and read-endpoint tickets, on the way to Flow 1 ("a trigger arrives and
+becomes a Tier 2 draft awaiting approval").
 
 ## Architecture
 
@@ -54,12 +60,12 @@ than separate deployed services — see
 
 ```
 apps/
-  console-api/   NestJS app (Express adapter) — human-facing API, health check today
+  console-api/   NestJS app (Express adapter) — human-facing API: health + queue/account reads
   worker/        Fastify app — background/orchestration process, health check + job stub today
   console-web/   placeholder — no source yet
 packages/
   db/            Prisma schema, generated client, Testcontainers test helper (@erria/db)
-  domain/        placeholder — no source yet, reserved for framework-free business logic
+  domain/        framework-free business logic — tiering and drafting (@erria/domain)
 ```
 
 For the full system design, data model rationale, and planned flows, see:
@@ -106,7 +112,7 @@ migration step reads it) and running either app.
 | Variable | Used by | Notes |
 | --- | --- | --- |
 | `DATABASE_URL` | `console-api`, `worker`, `packages/db` | Required at boot — both apps throw and exit if unset |
-| `ANTHROPIC_API_KEY` | `worker` (`@anthropic-ai/sdk` is a dependency) | Not yet consumed by any code path in this checkout |
+| `ANTHROPIC_API_KEY` | nothing yet (`@anthropic-ai/sdk` is a dependency of `packages/domain` and `apps/worker`) | Still unconsumed: `draftMessage` takes an already-constructed client (`deps: { client }`), and nothing in this checkout constructs one, so the SDK never reads this |
 | `CONSOLE_API_PORT` | `console-api` | Defaults to `3000` |
 | `WORKER_PORT` | `worker` | Defaults to `3100` |
 | `WORKER_INTERNAL_URL` | reserved for `console-api` → `worker` calls | Not yet consumed |
@@ -167,6 +173,24 @@ curl http://localhost:3000/health   # { "status": "ok" }
 curl http://localhost:3100/health   # { "status": "ok" }
 ```
 
+`console-api` also serves two read endpoints:
+
+```bash
+curl http://localhost:3000/api/queue          # { "items": [], "total": 0, "page": 1, "pageSize": 20 }
+curl http://localhost:3000/api/accounts/<id>  # 404 when the account does not exist
+```
+
+> **Known issue — these two return 500 under `dev`.** `tsx` compiles through esbuild, which does
+> not emit the `emitDecoratorMetadata` reflection data NestJS needs to resolve constructor
+> parameters, so every injected service arrives as `undefined`. `/health` is unaffected because its
+> controller has no dependencies. Until
+> [#35](https://github.com/konica/erria-work-sample/issues/35) is fixed, run the compiled build to
+> exercise the `/api/*` endpoints:
+>
+> ```bash
+> pnpm build && pnpm --filter console-api start   # node dist/main.js — tsc does emit the metadata
+> ```
+
 The worker also accepts a one-shot job invocation instead of starting the server. This path runs
 before the `DATABASE_URL` check, so it needs neither the database nor the exported environment:
 
@@ -189,24 +213,25 @@ pnpm typecheck   # pnpm -r run typecheck  — tsc --noEmit in each package
 pnpm test        # pnpm -r run test       — vitest run in each package
 ```
 
-`packages/domain` and `apps/console-web` have no `package.json` yet, so these currently run
-against 3 of the 4 directories under `apps/`/`packages/`.
+`apps/console-web` has no `package.json` yet, so these currently run against 4 of the 5 directories
+under `apps/`/`packages/`.
 
-Running `pnpm test` runs the Testcontainers-backed Prisma integration test in `packages/db`
-(spins up and tears down a real `postgres:17` container automatically) alongside the unit/e2e
-suites in `apps/console-api` and `apps/worker` — no manual database setup required for `pnpm test`
-itself.
+Running `pnpm test` runs the Testcontainers-backed integration tests in `packages/db` and
+`apps/console-api` (each spins up and tears down a real `postgres:17` container automatically)
+alongside the unit suites in `packages/domain` and `apps/worker` — no manual database setup
+required for `pnpm test` itself.
 
 ## Project layout
 
 ```
 apps/
-  console-api/    NestJS (Express) — src/main.ts, src/app.module.ts, src/health/, src/prisma/
+  console-api/    NestJS (Express) — src/main.ts, src/app.module.ts, src/health/, src/prisma/,
+                  src/queue/, src/accounts/
   worker/         Fastify — src/main.ts, src/server.ts, src/jobs/run-job.ts
   console-web/    empty placeholder
 packages/
   db/             prisma/schema.prisma, prisma/migrations/, src/client.ts, src/test-utils/
-  domain/         empty placeholder
+  domain/         src/tiering/, src/drafting/, src/errors.ts (@erria/domain)
 docs/
   adr/            architecture decision records
   architecture/   application- and infra-architecture docs
