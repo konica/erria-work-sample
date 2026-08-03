@@ -24,9 +24,12 @@ built yet. See [Status](#status) below for exactly what is and isn't implemented
   `Message`, `Escalation`, `Resolution`, `TierHistoryEvent`, `AuditSample`, `Setting`, `LlmCall`)
   targeting PostgreSQL, with an applied migration and a Testcontainers-backed integration test
   that proves a fresh Postgres can be migrated and queried through the generated client.
+- `packages/domain` (`@erria/domain`): framework-free business logic — `recommendTierForTrigger`
+  (spec §3/§4 tier recommendations) and message drafting (`draftMessage`, its Zod output schema,
+  and the tone system prompt). No framework imports, so it is testable without booting either app.
 - `apps/console-api`: a NestJS app that boots, validates `DATABASE_URL` at startup, and exposes
-  `GET /health`. Includes a global `PrismaModule` (a `PRISMA` DI token) for later feature modules
-  to build on.
+  `GET /health`, `GET /api/queue` and `GET /api/accounts/:id`. Includes a global `PrismaModule`
+  (a `PRISMA` DI token) that feature modules build on.
 - `apps/worker`: a standalone Fastify server that boots, validates `DATABASE_URL`, and exposes
   `GET /health`, plus a `--job=<name>` CLI entrypoint stub (`followup-cadence`,
   `audit-sample-maintenance`, `stuck-send-reconciliation`) that validates the job name and
@@ -34,17 +37,17 @@ built yet. See [Status](#status) below for exactly what is and isn't implemented
 
 **Not yet built:**
 
-- `packages/domain` and `apps/console-web` are empty placeholder directories (no source, no
-  `package.json`) reserved for the framework-free business-logic package and the console frontend
-  respectively.
-- No drafting, tiering, or hard-trigger escalation logic exists yet — both services currently do
-  nothing but health-check.
+- `apps/console-web` is an empty placeholder directory (no source, no `package.json`) reserved for
+  the console frontend.
+- Nothing orchestrates the domain modules yet: no end-to-end flow turns an incoming trigger into a
+  tiered, drafted message, and no hard-trigger escalation exists. The worker never calls
+  `@erria/domain`.
 - No CI workflow is configured in this checkout.
 
-This corresponds to Tasks 1–4 of Plan 1 (see
-[`docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md`](docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md)),
-the "foundation" slice that precedes Flow 1 ("a trigger arrives and becomes a Tier 2 draft
-awaiting approval").
+This covers the "foundation" slice of Plan 1 (see
+[`docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md`](docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md))
+plus the tiering, drafting, and read-endpoint tickets, on the way to Flow 1 ("a trigger arrives and
+becomes a Tier 2 draft awaiting approval").
 
 ## Architecture
 
@@ -54,12 +57,12 @@ than separate deployed services — see
 
 ```
 apps/
-  console-api/   NestJS app (Express adapter) — human-facing API, health check today
+  console-api/   NestJS app (Express adapter) — human-facing API: health + queue/account reads
   worker/        Fastify app — background/orchestration process, health check + job stub today
   console-web/   placeholder — no source yet
 packages/
   db/            Prisma schema, generated client, Testcontainers test helper (@erria/db)
-  domain/        placeholder — no source yet, reserved for framework-free business logic
+  domain/        framework-free business logic — tiering and drafting (@erria/domain)
 ```
 
 For the full system design, data model rationale, and planned flows, see:
@@ -78,10 +81,14 @@ For the full system design, data model rationale, and planned flows, see:
 
 - Node.js **>=24**
 - pnpm **10** (`packageManager` is pinned to `pnpm@10.0.0`)
-- A PostgreSQL 17-compatible database reachable via `DATABASE_URL` (for running the apps or the
-  `packages/db` integration test outside of Testcontainers)
-- Docker, for the Testcontainers-backed `packages/db` integration test (it spins up a disposable
-  `postgres:17` container automatically — no manual database needed just to run `pnpm test`)
+- Docker, for two independent things:
+  - `pnpm compose:up`, which starts the local dependencies (PostgreSQL 17) the apps need — see
+    [Local dependencies](#local-dependencies)
+  - the Testcontainers-backed `packages/db` integration test, which spins up its own disposable
+    `postgres:17` container (no manual database needed just to run `pnpm test`)
+
+Any PostgreSQL 17-compatible database reachable via `DATABASE_URL` works if you would rather not
+use `compose.yaml`.
 
 ## Getting started
 
@@ -94,38 +101,48 @@ cp .env.example .env
 Either order works. `pnpm install` runs `prisma generate` through `packages/db`'s `postinstall`,
 and that step deliberately does **not** require `DATABASE_URL` — `generate` never connects to a
 database, so a fresh clone installs cleanly before any `.env` exists (see the comment in
-`packages/db/prisma.config.ts`). The commands that do connect need it: `prisma migrate deploy`
-below, and running either app.
+`packages/db/prisma.config.ts`). The commands that do connect need it: `pnpm compose:up` (whose
+migration step reads it) and running either app.
 
 `.env.example` documents the environment variables the apps read:
 
 | Variable | Used by | Notes |
 | --- | --- | --- |
 | `DATABASE_URL` | `console-api`, `worker`, `packages/db` | Required at boot — both apps throw and exit if unset |
-| `ANTHROPIC_API_KEY` | `worker` (`@anthropic-ai/sdk` is a dependency) | Not yet consumed by any code path in this checkout |
+| `ANTHROPIC_API_KEY` | nothing yet (`@anthropic-ai/sdk` is a dependency of `packages/domain` and `apps/worker`) | Still unconsumed: `draftMessage` takes an already-constructed client (`deps: { client }`), and nothing in this checkout constructs one, so the SDK never reads this |
 | `CONSOLE_API_PORT` | `console-api` | Defaults to `3000` |
 | `WORKER_PORT` | `worker` | Defaults to `3100` |
 | `WORKER_INTERNAL_URL` | reserved for `console-api` → `worker` calls | Not yet consumed |
 | `CONSOLE_WEB_ORIGIN` | `console-api` (CORS) | Unset means CORS is closed by default, not open |
 
-If you don't already have a local Postgres, a disposable one for manual testing looks like:
+## Local dependencies
+
+`compose.yaml` holds the runtime dependencies the apps need locally — today just PostgreSQL.
+One command starts them and applies the schema:
 
 ```bash
-docker run -d --name erria-postgres -e POSTGRES_USER=erria -e POSTGRES_PASSWORD=erria \
-  -e POSTGRES_DB=erria_dev -p 5432:5432 postgres:17
+pnpm compose:up      # docker compose up -d --wait, then prisma migrate deploy
+pnpm compose:down    # stop the stack, keep the data
+pnpm compose:reset   # wipe the volume and come back up migrated
 ```
 
-Then apply the schema:
+`compose:up` applies migrations as well as starting the container, which its name doesn't
+advertise — it is deliberate, so that bringing the stack up leaves you with a database you can
+actually query. It needs `.env` to exist first, because the migration reads `DATABASE_URL`
+through `packages/db/prisma.config.ts`.
 
-```bash
-pnpm --filter @erria/db exec prisma migrate deploy
-```
+Data lives in a named volume (`erria-pgdata`) and survives `compose:down`; only `compose:reset`
+discards it. If something already owns port 5432, set `POSTGRES_PORT` in `.env` — Compose reads
+that file automatically — and update `DATABASE_URL` to match.
+
+`pnpm test` does not use this stack: `packages/db`'s integration test starts its own disposable
+`postgres:17` through Testcontainers, so tests pass whether or not the compose stack is running.
 
 ## Running the apps
 
 Two things the `dev` scripts do not do for you.
 
-**Build the workspace packages first.** `dev` is `tsx watch`, which does not build dependencies,
+**Build the workspace packages first.** `dev` is a watcher, not a build, so it does not build dependencies,
 and `@erria/db` resolves through its `main` field to `dist/index.js`. Until that is compiled,
 `console-api` dies at boot with `ERR_MODULE_NOT_FOUND` for `@erria/db/dist/index.js`:
 
@@ -153,11 +170,28 @@ curl http://localhost:3000/health   # { "status": "ok" }
 curl http://localhost:3100/health   # { "status": "ok" }
 ```
 
+`console-api` also serves two read endpoints:
+
+```bash
+curl http://localhost:3000/api/queue          # { "items": [], "total": 0, "page": 1, "pageSize": 20 }
+curl http://localhost:3000/api/accounts/<id>  # 404 when the account does not exist
+```
+
+Both `dev` scripts run `node --watch --import @swc-node/register/esm-register`. SWC rather than
+esbuild is deliberate and load-bearing, not a preference: NestJS resolves implicit constructor
+parameters (`private readonly x: XService`, with no `@Inject` token) from `design:paramtypes`
+metadata, and esbuild cannot emit it regardless of `emitDecoratorMetadata` in `tsconfig.json`. Under
+an esbuild-based runner every injected dependency silently arrives as `undefined`: the app boots,
+logs its mapped routes, and then 500s on the first request to any endpoint with a dependency. That
+was [#35](https://github.com/konica/erria-work-sample/issues/35). `apps/console-api`'s Vitest config
+uses `unplugin-swc` for the same reason, and `src/controller-injection.spec.ts` guards against a
+regression.
+
 The worker also accepts a one-shot job invocation instead of starting the server. This path runs
 before the `DATABASE_URL` check, so it needs neither the database nor the exported environment:
 
 ```bash
-pnpm --filter worker exec tsx src/main.ts --job=followup-cadence
+pnpm --filter worker exec node --import @swc-node/register/esm-register src/main.ts --job=followup-cadence
 # [stub] job "followup-cadence" invoked — no-op until a later plan implements it
 ```
 
@@ -175,30 +209,32 @@ pnpm typecheck   # pnpm -r run typecheck  — tsc --noEmit in each package
 pnpm test        # pnpm -r run test       — vitest run in each package
 ```
 
-`packages/domain` and `apps/console-web` have no `package.json` yet, so these currently run
-against 3 of the 4 directories under `apps/`/`packages/`.
+`apps/console-web` has no `package.json` yet, so these currently run against 4 of the 5 directories
+under `apps/`/`packages/`.
 
-Running `pnpm test` runs the Testcontainers-backed Prisma integration test in `packages/db`
-(spins up and tears down a real `postgres:17` container automatically) alongside the unit/e2e
-suites in `apps/console-api` and `apps/worker` — no manual database setup required for `pnpm test`
-itself.
+Running `pnpm test` runs the Testcontainers-backed integration tests in `packages/db` and
+`apps/console-api` (each spins up and tears down a real `postgres:17` container automatically)
+alongside the unit suites in `packages/domain` and `apps/worker` — no manual database setup
+required for `pnpm test` itself.
 
 ## Project layout
 
 ```
 apps/
-  console-api/    NestJS (Express) — src/main.ts, src/app.module.ts, src/health/, src/prisma/
+  console-api/    NestJS (Express) — src/main.ts, src/app.module.ts, src/health/, src/prisma/,
+                  src/queue/, src/accounts/
   worker/         Fastify — src/main.ts, src/server.ts, src/jobs/run-job.ts
   console-web/    empty placeholder
 packages/
   db/             prisma/schema.prisma, prisma/migrations/, src/client.ts, src/test-utils/
-  domain/         empty placeholder
+  domain/         src/tiering/, src/drafting/, src/errors.ts (@erria/domain)
 docs/
   adr/            architecture decision records
   architecture/   application- and infra-architecture docs
   superpowers/    specs/ (behavior design) and plans/ (implementation plans)
   agents/         repo agent-skill configuration notes
 design-system/    design tokens and design reference doc
+compose.yaml      local runtime dependencies (PostgreSQL) — see Local dependencies
 CONTEXT.md        domain glossary — read this before naming anything new
 ```
 

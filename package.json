@@ -7,7 +7,10 @@
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test"
+    "test": "pnpm -r run test",
+    "compose:up": "docker compose up -d --wait && pnpm --filter @erria/db exec prisma migrate deploy",
+    "compose:down": "docker compose down",
+    "compose:reset": "docker compose down -v && pnpm compose:up"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
