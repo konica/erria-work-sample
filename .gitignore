@@ -11,3 +11,4 @@ node_modules/
 dist/
 packages/*/src/generated/
 .env
+.pnpm-store
