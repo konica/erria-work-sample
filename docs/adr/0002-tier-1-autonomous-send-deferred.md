@@ -1,6 +1,8 @@
 # Tier 1 autonomous sending is an explicit, deferred gap
 
-**Status:** accepted
+**Status:** superseded by [ADR-0006](0006-autonomous-send-designed-deferrals-lifted.md) — autonomous
+send is now designed, so the deferral this ADR records is lifted. Kept for the reasoning, which
+still explains why the gap was left open deliberately rather than guessed at.
 
 The behavior spec's tiering table (§3) defines Tier 1 as "agent sends autonomously," but none of
 the four flows in the application architecture doc's §5 ever specify that path end to end — every

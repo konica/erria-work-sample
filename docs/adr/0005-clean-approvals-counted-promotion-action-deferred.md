@@ -1,6 +1,8 @@
 # Clean Approvals are counted; the promotion action itself is deferred
 
-**Status:** accepted (temporary — lifts together with [ADR-0002](0002-tier-1-autonomous-send-deferred.md))
+**Status:** superseded by [ADR-0006](0006-autonomous-send-designed-deferrals-lifted.md) — it lifted
+together with [ADR-0002](0002-tier-1-autonomous-send-deferred.md), exactly as this ADR anticipated.
+The promotion action is now performed. Kept for the reasoning behind counting without promoting.
 
 The approve→send flow increments `Account.cleanApprovalsCount` and writes a
 `TierHistoryEvent(clean_approval)` on every unedited send with no negative signal since — the
