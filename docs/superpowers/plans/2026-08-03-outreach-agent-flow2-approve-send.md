@@ -51,11 +51,14 @@ tables; the entire schema was created in Plan 1 Task 2.
   dispatch path check for an active Escalation with `agentSendDisabled` before proceeding. No
   Escalation rows exist until Plan 3, so these queries return empty today — they are written now
   because retrofitting a safety check after the thing it guards against exists is the wrong order.
-- **Stated assumption — email subject line.** Neither the behavior spec nor any mockup defines a
-  subject for outbound email; the mockup shows body text only. This plan derives one from the
-  vessel and trigger (`"MV Song Hong Pioneer — life-raft service window"`, falling back to the
-  account name when there is no vessel). Flagged for confirmation; it is isolated in one function
-  (Task 2) so changing it later touches one place.
+- **Email subject line follows the spec's worked example.** Spec §6 illustrates the intended voice
+  directly — `"Quick note on MV Song Hong Pioneer's life-raft service window"` for a first message,
+  and `"Re: MV Song Hong Pioneer service window — station availability update"` for the follow-up.
+  That phrasing is doing real work: "Quick note on…" reads as a person writing, which is what §5's
+  low-pressure close and named-human signature are both after. A terser machine-style subject
+  (`"MV Song Hong Pioneer — life-raft service window"`) would undercut it. The derivation lives in
+  one function (Task 2) so the wording can be revised in one place. §6 is labelled illustrative, so
+  treat the *pattern* as governing and the exact words as a starting point.
 - **No real mail provider.** The outbound channel is a swappable adapter behind one interface
   (architecture §0 lists the actual SMTP/Graph implementation as a non-goal). This plan ships the
   interface plus a logging adapter used by dev and tests.
@@ -269,14 +272,14 @@ import { describe, it, expect } from 'vitest';
 import { buildSubjectLine } from './subject-line.js';
 
 describe('buildSubjectLine', () => {
-  it('uses the vessel name and trigger category when a vessel is known', () => {
+  it('matches the spec §6 worked example when a vessel is known', () => {
     expect(
       buildSubjectLine({
         companyName: 'Song Hong Shipping',
         vesselName: 'MV Song Hong Pioneer',
         triggerCategory: 'life-raft service window',
       }),
-    ).toBe('MV Song Hong Pioneer — life-raft service window');
+    ).toBe("Quick note on MV Song Hong Pioneer's life-raft service window");
   });
 
   it('falls back to the company name when there is no vessel', () => {
@@ -286,13 +289,23 @@ describe('buildSubjectLine', () => {
         vesselName: null,
         triggerCategory: 'life-raft service window',
       }),
-    ).toBe('Song Hong Shipping — life-raft service window');
+    ).toBe("Quick note on Song Hong Shipping's life-raft service window");
   });
 
-  it('falls back to the company name alone when there is no trigger category either', () => {
+  it('falls back to the name alone when there is no trigger category either', () => {
     expect(
       buildSubjectLine({ companyName: 'Song Hong Shipping', vesselName: null, triggerCategory: null }),
-    ).toBe('Song Hong Shipping');
+    ).toBe('Quick note on Song Hong Shipping');
+  });
+
+  it('does not produce a doubled s on a name that already ends in one', () => {
+    expect(
+      buildSubjectLine({
+        companyName: 'Vinh Long Coastal Services',
+        vesselName: null,
+        triggerCategory: 'EPIRB battery expiry',
+      }),
+    ).toBe("Quick note on Vinh Long Coastal Services' EPIRB battery expiry");
   });
 });
 ```
@@ -309,7 +322,7 @@ describe('LoggingChannelAdapter', () => {
 
     const result = await adapter.send({
       to: 'lan.pham@example.com',
-      subject: 'MV Song Hong Pioneer — life-raft service window',
+      subject: "Quick note on MV Song Hong Pioneer's life-raft service window",
       body: 'Hi Ms. Pham, ...',
     });
 
@@ -378,12 +391,20 @@ export interface SubjectLineInput {
 }
 
 /**
- * Neither the behavior spec nor the mockups define an email subject — they show body copy only.
- * This is a stated assumption, deliberately isolated here so revising it touches one function.
+ * Follows the pattern spec §6 illustrates — "Quick note on MV Song Hong Pioneer's life-raft service
+ * window". The conversational opener is deliberate, not decoration: it reads as a person writing,
+ * which is the same thing §5's named-human signature and low-pressure close are protecting.
+ * Isolated here so the wording can be revised in one place.
  */
 export function buildSubjectLine(input: SubjectLineInput): string {
-  const lead = input.vesselName ?? input.companyName;
-  return input.triggerCategory ? `${lead} — ${input.triggerCategory}` : lead;
+  const subject = input.vesselName ?? input.companyName;
+  return input.triggerCategory
+    ? `Quick note on ${possessive(subject)} ${input.triggerCategory}`
+    : `Quick note on ${subject}`;
+}
+
+function possessive(name: string): string {
+  return name.endsWith('s') ? `${name}'` : `${name}'s`;
 }
 ```
 
@@ -1203,7 +1224,7 @@ describe('POST /internal/dispatch-message/:messageId', () => {
 
     expect(adapter.sent).toHaveLength(1);
     expect(adapter.sent[0].to).toBe('lan@example.com');
-    expect(adapter.sent[0].subject).toBe('MV Song Hong Pioneer — life-raft service window');
+    expect(adapter.sent[0].subject).toBe("Quick note on MV Song Hong Pioneer's life-raft service window");
 
     const updated = await testDb.prisma.message.findUniqueOrThrow({ where: { id: message.id } });
     expect(updated.status).toBe('sent');
@@ -2244,9 +2265,11 @@ git commit -m "feat(console-web): add Account Detail draft review with approve/r
   two `buildServer({ prisma, anthropic })` call sites in `process-trigger.integration.spec.ts` —
   Task 6 Step 8 names that fix explicitly. `QueuePage`'s signature gains a required prop in Task 9,
   which breaks Plan 1's `QueuePage.test.tsx` renders — Task 9 Step 5 names that fix too.
-- **Known gap, stated not hidden:** the email subject line is invented by this plan (Task 2), since
-  no spec or mockup defines one. It is isolated in `buildSubjectLine` so revising it is a one-file
-  change.
+- **Correction applied after review:** an earlier draft of this plan asserted that no spec or mockup
+  defined an email subject, and invented a terse machine-style one. That was wrong — spec §6's
+  worked example illustrates both a first-message and a follow-up subject, and its "Quick note on…"
+  phrasing carries the same intent as §5's named-human signature. Task 2 now follows the spec's
+  pattern, and `buildSubjectLine` keeps it in one place.
 - **`decidedBy` is hardcoded** to one operator name until Keycloak/OIDC is wired, which architecture
   §0 lists as a non-goal for this phase. Named in Task 4 with the reason, rather than left as a
   silent literal.

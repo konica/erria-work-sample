@@ -292,6 +292,11 @@ Settings are deliberately split by risk rather than offered as one undifferentia
   opposed to what percentage of them. Sampling everything uniformly is the honest default while
   Tier 1 is rare; carving out exemptions before there's volume to justify them would be tuning
   against imagined data.
+- **An escalation response SLA.** §9 records time-to-resolution on every closed escalation, and
+  deliberately reports it as information rather than as a measure against a target: with no
+  historical data on how long these actually take, any number set now would be invented. Once
+  there are enough closed escalations to see the real distribution, a target becomes a decision
+  worth making — and this is where it would be configured.
 - **A settings change log.** v04's mockup included one (who/what/when/old→new), but on review this
   was cut for v1: a change log only means something once there's also a concept of *who* is allowed
   to change settings, and this design deliberately isn't building access control yet either (a
