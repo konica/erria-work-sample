@@ -61,7 +61,65 @@ on day one, with no track record to justify that trust. So:
 
 This means Tier 1 is *earned*, not assigned — a deliberate, conservative choice appropriate to a
 two-person team introducing AI outreach into a business that has never had it, rather than an
-engineering nicety.
+engineering nicety. It is also the **only** route to Tier 1: a human can move an account to Tier 2
+or Tier 3 by hand, but cannot grant Tier 1, because handing out the standing an account is supposed
+to prove would defeat the overlay's entire purpose.
+
+### What "sends autonomously" actually permits
+
+Tier 1 grants the agent *permission* to send without review — not an obligation to. Five conditions
+must all hold at the moment of sending; if any fails, that **one message** drafts and waits for
+approval instead, and the account keeps its earned tier. (The same mechanic §4 rule 5 already uses:
+a cap on a message, not a judgment about an account.)
+
+| Condition | If it fails |
+|---|---|
+| Autonomous sending is switched on org-wide | message waits for approval |
+| No open escalation on the account | message waits for approval |
+| The message doesn't cite a vessel's compliance deadline (rule 5) | message waits for approval |
+| The draft's own confidence is *high*, not merely acceptable | message waits for approval |
+| A contact address exists | flagged for human triage — nothing to approve |
+
+The confidence condition is the one worth dwelling on. On a Tier 2 account a middling draft is
+harmless, because a human reads it either way. On a Tier 1 account it would reach a customer unread.
+Requiring the agent's *own* confidence to be high before it sends unsupervised is the cheapest
+safeguard available, and it costs nothing when the agent is right.
+
+**A switch stops all autonomous sending at once.** Pausing takes effect immediately, with no
+confirmation step — an emergency stop that asks "are you sure?" is a worse emergency stop. Resuming
+does require confirmation, because resuming is the direction that can cause harm. While paused, the
+system degrades to Tier 2 behavior rather than halting: accounts keep their tiers and their messages
+simply queue for approval. The switch starts **off**; autonomy is turned on deliberately, once.
+
+### What a demotion costs
+
+§3's demotion rule handles the incident. This handles the *earned progress*, which is a separate
+question: without a rule, an account with four clean approvals that draws a complaint, drops to
+Tier 3, and is later restored by hand would re-qualify for Tier 1 on its very next clean message —
+the complaint would have cost it nothing durable.
+
+So the clean-approval count resets to zero, but **only when the escalation indicates damaged trust**:
+a complaint, opt-out, or factual correction, or evidence the agent contacted someone it shouldn't
+have. It does *not* reset for a pricing question, a technical question, a reply in another language,
+or a case the classifier simply couldn't call. Those are healthy or neutral signals — §9 makes the
+point that a pricing question is a buying signal — and zeroing an account's progress for asking
+about price would punish precisely the behavior Erria wants. Either way the tier history records
+which happened, so "escalated, progress kept" is distinguishable from "escalated, progress lost."
+
+### Follow-ups sent autonomously
+
+§5 allows at most two follow-ups, each **adding new information**. A Tier 1 follow-up therefore sends
+only when something genuinely new exists to say — a new trigger, corrected vessel particulars, an
+updated account picture. When there is nothing new, the sequence simply **ends**: no message, and no
+human asked to write filler either.
+
+Whether something new exists is a question about data, and is answered from the record rather than
+by the agent's own judgment. The agent is never asked "do you have anything new to say?" — a
+drafting agent has every incentive to answer yes, and answering it wrongly produces exactly the bare
+"just checking in" that §5 forbids. The agent is told *which* facts are new, and writes about those.
+
+The full mechanics are designed in
+[`2026-08-03-autonomous-send-design.md`](2026-08-03-autonomous-send-design.md).
 
 ## 4. Hard escalation triggers (override tier, always)
 
@@ -269,6 +327,14 @@ without designing it.
 ## 11. Admin-configurable settings
 
 Settings are deliberately split by risk rather than offered as one undifferentiated list:
+
+**The autonomous-sending switch sits outside this split, deliberately** (§3). It is the one control
+whose two directions carry opposite risk, so it gets opposite treatment: **pausing is immediate and
+unconfirmed**, because an emergency stop that interrogates you is a worse emergency stop, while
+**resuming takes the confirmation step**. Filing it under one risk class would force the wrong
+behavior on one of its two directions. It starts off, and pausing records a short reason so whoever
+finds the system paused can see why without having to ask — operational state, not the settings
+change log deferred below.
 
 **Freely adjustable, no confirmation needed:**
 - Tier 1 promotion threshold — clean approvals required before Tier 1 (integer, 1–4, default 2)
