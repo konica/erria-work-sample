@@ -21,13 +21,19 @@ interface QueueResponse {
 
 export function QueuePage() {
   const [data, setData] = useState<QueueResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/queue')
-      .then((response) => response.json())
-      .then((body: QueueResponse) => setData(body));
+      .then((response) => {
+        if (!response.ok) throw new Error(`GET /api/queue failed: ${response.status}`);
+        return response.json();
+      })
+      .then((body: QueueResponse) => setData(body))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to load queue'));
   }, []);
 
+  if (error) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading queue…</p>;
 
   return (

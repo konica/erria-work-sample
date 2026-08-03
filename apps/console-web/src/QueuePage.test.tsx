@@ -34,6 +34,7 @@ describe('QueuePage', () => {
     render(<QueuePage />);
     await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
     expect(screen.getByText('MV Song Hong Pioneer')).toBeInTheDocument();
-    expect(screen.getByText('Tier 2')).toBeInTheDocument();
+    expect(screen.getByText('Life-raft service window')).toBeInTheDocument();
+    expect(screen.getByText('Tier 2')).toHaveClass('badge', 't2');
   });
 });
