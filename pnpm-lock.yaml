@@ -81,6 +81,9 @@ importers:
       '@erria/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@erria/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       fastify:
         specifier: ^5.2.0
         version: 5.11.0
