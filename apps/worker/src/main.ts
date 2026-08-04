@@ -1,13 +1,17 @@
+import Anthropic from '@anthropic-ai/sdk';
+import { prisma } from '@erria/db';
 import { buildServer } from './server.js';
 import { runJob } from './jobs/run-job.js';
 
 const jobArg = process.argv.find((arg) => arg.startsWith('--job='));
 
-function assertDatabaseUrl(): void {
-  if (!process.env.DATABASE_URL) {
-    throw new Error(
-      'Missing required environment variable DATABASE_URL. Set it before starting the worker server (see .env.example).',
-    );
+function assertServerEnv(): void {
+  for (const name of ['DATABASE_URL', 'ANTHROPIC_API_KEY'] as const) {
+    if (!process.env[name]) {
+      throw new Error(
+        `Missing required environment variable ${name}. Set it before starting the worker server (see .env.example).`,
+      );
+    }
   }
 }
 
@@ -18,9 +22,10 @@ async function main() {
     process.exit(0);
   }
 
-  assertDatabaseUrl();
+  assertServerEnv();
 
-  const server = buildServer();
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const server = buildServer({ prisma, anthropic });
   const port = process.env.WORKER_PORT ? Number(process.env.WORKER_PORT) : 3100;
   await server.listen({ port, host: '0.0.0.0' });
 
