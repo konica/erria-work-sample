@@ -97,7 +97,14 @@ function dispatchOne(issue, repo) {
   // `--permission-mode auto` so a dispatched ticket doesn't sit `blocked` waiting on a permission
   // decision nobody's attached to answer -- `--dangerously-skip-permissions` is not used here since
   // it's documented as only recommended for sandboxes with no internet access, which this isn't.
-  const output = execFileSync('claude', ['--bg', '--permission-mode', 'auto', prompt], { encoding: 'utf8' });
+  // `--name` sets the display name shown in `claude agents` / the agent view picker -- without
+  // it, every dispatched session shows the same truncated prompt prefix ("Implement GitHub
+  // issue…"), giving no way to tell which ticket a session is working on at a glance.
+  const output = execFileSync(
+    'claude',
+    ['--bg', '--permission-mode', 'auto', '--name', branch, prompt],
+    { encoding: 'utf8' },
+  );
   return { branch, jobId: parseJobId(output) };
 }
 
