@@ -6,7 +6,7 @@ import type { ReactNode, SVGProps } from 'react';
  * Only the icons this ticket's shell actually renders are ported — the rest belong to screens
  * that don't exist yet.
  */
-export type IconName = 'queue' | 'review' | 'escalation' | 'audit' | 'sample' | 'gear' | 'moon' | 'sun';
+export type IconName = 'queue' | 'review' | 'escalation' | 'audit' | 'sample' | 'gear' | 'moon' | 'sun' | 'ship' | 'info';
 
 const PATHS: Record<IconName, ReactNode> = {
   queue: (
@@ -47,6 +47,20 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <circle cx={12} cy={12} r={4} />
       <path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" />
+    </>
+  ),
+  ship: (
+    <>
+      <path d="M3 15l2 5h14l2-5" />
+      <path d="M4 15V9l8-3 8 3v6" />
+      <path d="M12 6V3" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx={12} cy={12} r={9} />
+      <path d="M12 11v5" />
+      <path d="M12 7.5h.01" />
     </>
   ),
 };

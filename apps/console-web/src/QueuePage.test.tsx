@@ -37,4 +37,23 @@ describe('QueuePage', () => {
     expect(screen.getByText('Life-raft service window')).toBeInTheDocument();
     expect(screen.getByText('Tier 2')).toHaveClass('badge', 't2');
   });
+
+  it('renders the row inside the styled q-table grid, not a bare <table>', async () => {
+    render(<QueuePage />);
+    await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
+
+    expect(document.querySelector('table.queue-table')).not.toBeInTheDocument();
+    expect(document.querySelector('.q-table')).toBeInTheDocument();
+    expect(document.querySelector('.q-head')).toBeInTheDocument();
+    expect(screen.getByText('Song Hong Shipping').closest('.q-row')).toBeInTheDocument();
+  });
+
+  it('renders the ICP fit, tier rationale, and last-action fields the API provides', async () => {
+    render(<QueuePage />);
+    await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
+
+    expect(screen.getByText('High fit')).toBeInTheDocument();
+    expect(screen.getByText('New account — rollout default')).toBeInTheDocument();
+    expect(screen.getByText(new Date('2026-08-02T00:00:00.000Z').toLocaleString())).toBeInTheDocument();
+  });
 });

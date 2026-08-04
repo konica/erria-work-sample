@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icon } from './shell/icons.js';
 
 interface QueueRow {
   accountId: string;
@@ -19,6 +20,29 @@ interface QueueResponse {
   pageSize: number;
 }
 
+const ICP_LABEL: Record<QueueRow['icpBand'], string> = {
+  high: 'High fit',
+  med: 'Medium',
+  low: 'Low',
+};
+
+function IcpMeter({ band }: { band: QueueRow['icpBand'] }) {
+  return (
+    <span className={`icp ${band}`}>
+      <span className="icp-bars">
+        <i />
+        <i />
+        <i />
+      </span>
+      <span className="icp-label">{ICP_LABEL[band]}</span>
+    </span>
+  );
+}
+
+function rowAccentFor(tier: number) {
+  return tier === 3 ? 'esc' : tier === 2 ? 'needs' : 'calm';
+}
+
 export function QueuePage() {
   const [data, setData] = useState<QueueResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,27 +61,41 @@ export function QueuePage() {
   if (!data) return <p>Loading queue…</p>;
 
   return (
-    <table className="queue-table">
-      <thead>
-        <tr>
-          <th>Company</th>
-          <th>Vessel</th>
-          <th>Trigger</th>
-          <th>Tier</th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.items.map((row) => (
-          <tr key={row.accountId}>
-            <td>{row.company}</td>
-            <td>{row.vessel ?? '—'}</td>
-            <td>{row.triggerSummary ?? '—'}</td>
-            <td>
-              <span className={`badge t${row.tier}`}>Tier {row.tier}</span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="q-table">
+      <div className="q-head">
+        <div>Account / Vessel</div>
+        <div>Trigger</div>
+        <div className="col-icp">ICP fit</div>
+        <div>Tier &amp; why</div>
+        <div>Last action</div>
+      </div>
+      {data.items.map((row) => (
+        <div className={`q-row ${rowAccentFor(row.tier)}`} key={row.accountId}>
+          <div className="acct">
+            <div className="co">{row.company}</div>
+            <div className="vessel">
+              <Icon name="ship" />
+              {[row.vessel, row.contact].filter(Boolean).join(' · ') || '—'}
+            </div>
+          </div>
+          <div className="trigger">
+            <div className="tline">{row.triggerSummary ?? '—'}</div>
+          </div>
+          <div className="icp-col">
+            <IcpMeter band={row.icpBand} />
+          </div>
+          <div className="tier-cell">
+            <span className={`badge t${row.tier}`}>Tier {row.tier}</span>
+            <span className="why">
+              <Icon name="info" />
+              <span>{row.tierWhy}</span>
+            </span>
+          </div>
+          <div className="rowcta">
+            <span className="time">{new Date(row.lastActionAt).toLocaleString()}</span>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
