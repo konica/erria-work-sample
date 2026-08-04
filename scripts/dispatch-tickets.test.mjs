@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { slugify, branchNameFor, selectBatch } from './dispatch-tickets.mjs';
+import { slugify, branchNameFor, selectBatch, buildPrompt } from './dispatch-tickets.mjs';
 
 test('slugify: strips a leading "<number> — " prefix and lowercases', () => {
   assert.equal(slugify('12 — An approved message actually sends'), 'an-approved-message-actually-sends');
@@ -61,4 +61,26 @@ test('selectBatch: caps at max, keeping the lowest numbers', () => {
 test('selectBatch: preserves extra fields like title on the returned issues', () => {
   const result = selectBatch([issue({ number: 10, title: 'Contact ingestion prefactor' })], 5);
   assert.equal(result[0].title, 'Contact ingestion prefactor');
+});
+
+test('buildPrompt: names the issue number, title, branch, and repo', () => {
+  const prompt = buildPrompt({
+    number: 12,
+    title: 'An approved message actually sends',
+    branch: 'worktree-ticket-12-an-approved-message-actually-sends',
+    repo: 'konica/erria-work-sample',
+  });
+  assert.match(prompt, /Implement GitHub issue #12 in this repo \(konica\/erria-work-sample\)/);
+  assert.match(prompt, /"An approved message actually sends"/);
+  assert.match(prompt, /worktree-ticket-12-an-approved-message-actually-sends/);
+});
+
+test('buildPrompt: instructs leaving the issue open for the PR merge to close it', () => {
+  const prompt = buildPrompt({ number: 12, title: 'x', branch: 'b', repo: 'r' });
+  assert.match(prompt, /Leave issue #12 open/);
+});
+
+test('buildPrompt: instructs the PR title format', () => {
+  const prompt = buildPrompt({ number: 12, title: 'An approved message actually sends', branch: 'b', repo: 'r' });
+  assert.match(prompt, /"Ticket #12 — An approved message actually sends"/);
 });

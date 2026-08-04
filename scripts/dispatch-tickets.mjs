@@ -30,3 +30,13 @@ export function selectBatch(issues, max) {
     .sort((a, b) => a.number - b.number)
     .slice(0, max);
 }
+
+export function buildPrompt({ number, title, branch, repo }) {
+  return `Implement GitHub issue #${number} in this repo (${repo}): "${title}".
+
+- Work in an isolated git worktree on branch ${branch}.
+- Read the issue (\`gh issue view ${number} --comments\`), plus CONTEXT.md and any ADRs it references.
+- Follow the repo's existing conventions and run the test suite.
+- Commit, push ${branch}, and open a PR titled "Ticket #${number} — ${title}".
+- Leave issue #${number} open -- it gets closed when the PR merges, not by you.`;
+}
