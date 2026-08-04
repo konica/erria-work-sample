@@ -2,6 +2,10 @@
  * Tier-badge variables and rules copied verbatim from the mockup's tier-badge system
  * (brainstorm/mockup/Erria-outreach-agent-v06/outreach-console.html) — design-system/tokens.css
  * doesn't define these; keep this file in sync with the mockup if its tier colors ever change.
+ *
+ * `.badge svg`/`.esc`/`.ok`/`.ghost` below are ticket #44 additions — the rest of the mockup's
+ * "Shared bits" `.badge` system (outreach-console.html lines 193, 197-199), kept in this file
+ * rather than components.css to keep the whole badge component in one place.
  */
 :root {
   --t1-fg: #475569; --t1-bg: #eef2f7; --t1-bd: #cdd8e6;
@@ -20,6 +24,10 @@
   padding: 3px 8px 3px 7px; border-radius: 999px;
   border: 1px solid transparent; white-space: nowrap;
 }
+.badge svg { width: 12px; height: 12px; flex: 0 0 auto; }
 .badge.t1 { color: var(--t1-fg); background: var(--t1-bg); border-color: var(--t1-bd); }
 .badge.t2 { color: var(--t2-fg); background: var(--t2-bg); border-color: var(--t2-bd); }
 .badge.t3 { color: var(--t3-fg); background: var(--t3-bg); border-color: var(--t3-bd); }
+.badge.esc { color: var(--esc-fg); background: var(--esc-bg); border-color: var(--esc-bd); }
+.badge.ok { color: var(--ok-fg); background: var(--ok-bg); border-color: var(--ok-bd); }
+.badge.ghost { color: var(--muted); background: var(--surface); border-color: var(--border); }
