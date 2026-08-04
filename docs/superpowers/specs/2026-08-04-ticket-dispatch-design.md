@@ -1,7 +1,6 @@
 # Parallel Ticket Dispatch — Design
 
-Status: Draft — pending a live test run of `scripts/dispatch-tickets.mjs` (confirm its
-background-launch line and `claude agents` visibility; see §5)
+Status: Approved — live-tested; `claude agents` visibility confirmed (§5)
 Last updated: 2026-08-04
 
 ## 1. Problem
@@ -86,19 +85,42 @@ node scripts/dispatch-tickets.mjs 10 11 15     # or dispatch these specific tick
 ```
 
 Either way, a candidate is skipped if it's already assigned or has an open blocker. For each ticket
-it does dispatch, the script claims the issue (`gh issue edit <n> --add-assignee @me`), then
-backgrounds a separate `claude -p` process per ticket — a genuinely independent OS-level process,
-not a subagent fanned out from one session, so each should appear as its own entry in `claude
-agents` (the goal in §4) without needing anything server-side. Worktree branch
-`worktree-ticket-<n>-<slug>`, logs under `.claude/dispatch-logs/`, one PR per ticket per §3.
+it does dispatch, the script claims the issue (`gh issue edit <n> --add-assignee @me`), then runs
+`claude --bg '<prompt>'` for it — the `claude` CLI's own flag for registering a background agent
+job and returning immediately, which is what makes each dispatched ticket appear as its own entry
+in `claude agents` (the goal in §4), manageable with `claude attach`/`claude logs`/`claude stop`.
+
+Getting here took one real dispatch to surface: the first cut used `claude -p '<prompt>'`
+backgrounded with Node's own `spawn(..., { detached: true })`, on the assumption that any
+detached OS process running `claude` would show up. It didn't — `-p`/`--print` registers the
+session as `"kind": "interactive"` in the agent registry (confirmed via `claude agents --json`),
+which the `claude agents` view doesn't surface. Live-dispatching tickets #11, #53, and #54 with
+that version proved this directly: `ps` and `claude agents --json` both showed the three processes
+running and genuinely making progress (non-zero CPU, each had moved into its own worktree), but
+none of them appeared as a `"kind": "background"` entry. `claude --bg` itself pointed at the fix
+when tried together with `-p`: *"--bg and --print conflict: --print never starts the interactive
+session that `claude agents` attaches to... drop --print: `claude --bg '<task>'`."* Switched to
+that (prompt passed positionally, no `-p`), confirmed with a throwaway dispatch that it registers
+as `"kind": "background"` with a proper job id, and the three already-running `-p`-launched
+sessions were left alone to finish rather than killed mid-work.
+
+One consequence of this fix: `claude --bg` handles its own backgrounding and returns in ~2 seconds,
+so the script no longer manages a detached child process or a log file itself — `dispatchOne()`
+just runs it and parses the job id out of its `backgrounded · <id>` output (`parseJobId()`,
+unit-tested). Progress and output for a dispatched ticket now come from `claude logs <id>` (or
+`claude attach <id>`), not `.claude/dispatch-logs/`.
 
 This is a manual, per-invocation tool, not a poller: nothing runs unattended between invocations,
 and re-running it is how new PM tickets or newly-unblocked tickets get picked up. Its decision logic
-(`slugify`, `branchNameFor`, `selectBatch`, `buildPrompt`) is unit-tested in
+(`slugify`, `branchNameFor`, `selectBatch`, `buildPrompt`, `parseJobId`) is unit-tested in
 `scripts/dispatch-tickets.test.mjs`, matching this repo's existing `scripts/setup.mjs` convention.
-The `spawn('claude', ['-p', prompt], { detached: true, ... })` call in `dispatchOne()` is a
-best-effort default, not yet verified against how sessions are actually started in this
-environment — confirm before relying on it.
+
+One known operational gap this surfaces: a `claude --bg` job can end up `"state": "blocked"` if it
+hits a permission decision with nobody attached to answer it (observed on an unrelated pre-existing
+background job while investigating this). This script doesn't pass any `--permission-mode`, so a
+dispatched ticket can in principle sit blocked the same way — checking `claude agents` for a
+`blocked` state and running `claude attach <id>` to unblock it is, for now, part of the same manual
+oversight §6 already asks for with stale claims, not a separate mechanism.
 
 **Was the `Workflow` tool considered instead?** Yes, and it doesn't fit either of the two things
 this needs. `Workflow` is a tool available *within* a Claude session (mine, in this conversation),

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Manually dispatch up to MAX ready-for-agent tickets as background `claude` processes.
+// Manually dispatch up to MAX ready-for-agent tickets as `claude --bg` background agent jobs,
+// visible and manageable via `claude agents` / `claude attach` / `claude logs` / `claude stop`.
 //
 //   node scripts/dispatch-tickets.mjs              auto-compute the frontier, dispatch up to MAX
 //   node scripts/dispatch-tickets.mjs 10 11 15     dispatch exactly these ticket numbers
@@ -8,9 +9,7 @@
 // (worktree-ticket-<n>-<slug>, matching existing PRs #47-#52), one PR per ticket.
 // See docs/superpowers/specs/2026-08-04-ticket-dispatch-design.md for the design.
 
-import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, openSync } from 'node:fs';
-import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 // ---------------------------------------------------------------------------
@@ -44,6 +43,11 @@ export function buildPrompt({ number, title, branch, repo }) {
 - Follow the repo's existing conventions and run the test suite.
 - Commit, push ${branch}, and open a PR titled "Ticket #${number} — ${title}".
 - Leave issue #${number} open -- it gets closed when the PR merges, not by you.`;
+}
+
+export function parseJobId(output) {
+  const match = output.match(/backgrounded\s*·\s*(\S+)/);
+  return match ? match[1] : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,19 +87,19 @@ function claim(number) {
   execFileSync('gh', ['issue', 'edit', String(number), '--add-assignee', '@me']);
 }
 
-function dispatchOne(issue, repo, logDir) {
+function dispatchOne(issue, repo) {
   const branch = branchNameFor(issue.number, issue.title);
   const prompt = buildPrompt({ number: issue.number, title: issue.title, branch, repo });
-  const logFd = openSync(join(logDir, `ticket-${issue.number}.log`), 'a');
-  const child = spawn('claude', ['-p', prompt], { detached: true, stdio: ['ignore', logFd, logFd] });
-  child.unref();
-  return { branch, pid: child.pid };
+  // `claude --bg` registers the session with the agent registry and returns immediately (~2s) --
+  // it does its own backgrounding, so this call is synchronous and there's nothing to detach.
+  // (`--bg` and `-p`/`--print` are mutually exclusive: `-p` never starts the session `claude
+  // agents`/`claude attach` can attach to, so a `-p`-launched process is invisible there.)
+  const output = execFileSync('claude', ['--bg', prompt], { encoding: 'utf8' });
+  return { branch, jobId: parseJobId(output) };
 }
 
 function main() {
   const max = Number(process.env.MAX ?? 3);
-  const logDir = process.env.LOG_DIR ?? '.claude/dispatch-logs';
-  mkdirSync(logDir, { recursive: true });
 
   const repo = repoNameWithOwner();
   const requested = process.argv.slice(2).map(Number);
@@ -104,11 +108,11 @@ function main() {
 
   for (const issue of batch) {
     claim(issue.number);
-    const { branch, pid } = dispatchOne(issue, repo, logDir);
-    console.log(`Dispatched #${issue.number} (${issue.title}) on ${branch} -- PID ${pid}`);
+    const { branch, jobId } = dispatchOne(issue, repo);
+    console.log(`Dispatched #${issue.number} (${issue.title}) on ${branch} -- job ${jobId ?? '(unknown)'}`);
   }
 
-  console.log(`Dispatched ${batch.length} ticket(s) this run.`);
+  console.log(`Dispatched ${batch.length} ticket(s) this run. Check progress with: claude agents`);
 }
 
 // Only run when executed directly (not when imported by the test).
