@@ -1,0 +1,52 @@
+/*
+ * Copied verbatim from `design-system/tokens.css`, which remains the source of truth — re-copy
+ * on changes rather than editing this file directly, until a later plan wires up a proper
+ * shared-package or build-time symlink for it.
+ */
+
+/*
+ * Colors below are manually curated (see tokens.json "curated" notes and DESIGN.md) —
+ * automated extraction from erria.dk returned an empty palette. "dark" theme values are a
+ * designer extrapolation for this project; erria.dk itself has no dark theme.
+ */
+:root {
+  --font-heading: Helvetica;
+  --font-body: Helvetica;
+  --space-1: 2px;
+  --space-2: 5px;
+  --space-3: 5.5px;
+  --space-4: 7px;
+  --space-5: 8px;
+  --space-6: 10px;
+  --space-7: 13px;
+  --space-8: 14.4px;
+  --space-9: 15px;
+  --space-10: 20px;
+  --space-11: 22.9531px;
+  --space-12: 25px;
+  --space-13: 30px;
+  --space-14: 94px;
+  --space-15: 100px;
+  --radius-1: 2px;
+  --radius-2: 3px;
+  --radius-3: 5px;
+  --radius-4: 6px;
+  --radius-5: 12px;
+  --shadow-1: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.23);
+
+  --color-background: #ffffff;
+  --color-surface: #f5f4f7;
+  --color-border: #ebf0f7;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #5a5a5a;
+  --color-brand-primary: #1e73be;
+}
+
+[data-theme="dark"] {
+  --color-background: #0f172a;
+  --color-surface: #1a2438;
+  --color-border: #2a3650;
+  --color-text-primary: #f5f4f7;
+  --color-text-secondary: #9aa3b2;
+  --color-brand-primary: #4a9bd8;
+}
