@@ -5,6 +5,8 @@ import { QueueController } from './queue/queue.controller.js';
 import { QueueService } from './queue/queue.service.js';
 import { AccountsController } from './accounts/accounts.controller.js';
 import { AccountsService } from './accounts/accounts.service.js';
+import { TriggersController } from './triggers/triggers.controller.js';
+import { TriggersService } from './triggers/triggers.service.js';
 
 // Regression guard for #35.
 //
@@ -76,5 +78,20 @@ describe('controller constructor injection (regression guard for #35)', () => {
     await expect(moduleRef.get(AccountsController).detail('missing')).rejects.toThrow(
       NotFoundException,
     );
+  });
+
+  it('injects TriggersService into TriggersController', async () => {
+    const receiveTrigger = vi.fn().mockResolvedValue({ triggerId: 'trigger-1' });
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [TriggersController],
+      providers: [{ provide: TriggersService, useValue: { receiveTrigger } }],
+    }).compile();
+
+    const dto = { account: { externalRef: 'crm-acc-001' } } as never;
+    await expect(moduleRef.get(TriggersController).receive(dto)).resolves.toEqual({
+      triggerId: 'trigger-1',
+    });
+    expect(receiveTrigger).toHaveBeenCalledWith(dto);
   });
 });

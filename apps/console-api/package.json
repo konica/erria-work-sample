@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "dev": "node --watch --import @swc-node/register/esm-register src/main.ts",
     "lint": "eslint .",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@erria/db": "workspace:*",
+    "@erria/domain": "workspace:*",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
@@ -22,6 +23,7 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@nestjs/testing": "^11.0.0",
     "@swc-node/register": "^1.12.1",
     "@swc/core": "^1.15.47",
