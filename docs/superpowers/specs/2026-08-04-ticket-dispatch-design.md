@@ -122,6 +122,37 @@ that internally fans out via `Agent`. If per-invocation parameterization turns o
 possible, this design falls back to the `Agent`-fan-out shape from the previous revision, with the
 per-ticket visibility gap in §5 accepted rather than solved.
 
+## 6a. Interim: manual dispatch script
+
+While §6 is pending verification, `scripts/dispatch-tickets.sh` gives an immediately-usable manual
+path: run it with no arguments to auto-compute the frontier (§3) and dispatch up to `MAX=3`
+unassigned, unblocked tickets, or pass explicit ticket numbers (`dispatch-tickets.sh 10 11 15`) to
+pick which ones — either way each is still skipped if it's already assigned or has an open blocker.
+For each one it dispatches, it claims the issue, then backgrounds a separate `claude -p` process per
+ticket (worktree branch `worktree-ticket-<n>-<slug>`, logs under `.claude/dispatch-logs/`).
+
+This intentionally launches genuinely separate top-level `claude` processes rather than fanning out
+via the `Agent` tool from one session — the same visibility goal as §6, reached a different way:
+since each ticket gets its own OS-level process, each should appear as its own entry in `claude
+agents` without depending on `RemoteTrigger` parameterization at all. The one line in the script
+that starts each session (`claude -p "$prompt" > "$logfile" 2>&1 &`) is flagged inline as a
+best-effort default — same unverifiable-from-here limitation as §6, so confirm it matches however
+you actually start a background session before relying on it.
+
+This script is a manual, per-run tool — you invoke it yourself whenever you want to dispatch a
+batch. It does not poll or run unattended; that remains what §6 is for once verified.
+
+**Was the `Workflow` tool considered instead?** Yes, and it doesn't fit either of the two things
+this needs. `Workflow` is a tool available *within* a Claude session (mine, in this conversation),
+not a program invokable from an external terminal — so it can't be "a script you run manually" at
+all. And its agents run as subagents of one `Workflow` task, tracked via `/workflows`, not as
+independent entries in `claude agents` — the same visibility limitation as `Agent`-fan-out in §5,
+for the same underlying reason (parent/child session scoping). Where `Workflow` would genuinely
+help is orchestration logic — encoding the wave/dependency structure as a `pipeline()` so later
+waves start the moment their blockers close, without an operator re-running anything — but that's a
+different problem from either of the two just solved (visibility, manual invocation), and would
+need to be layered on top of whichever of §6 or §6a is chosen, not instead of it.
+
 ## 7. Stale claims (known gap, manual for now)
 
 If a dispatched agent dies or stalls without ever opening a PR, its ticket stays assigned
