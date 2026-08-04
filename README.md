@@ -92,6 +92,23 @@ use `compose.yaml`.
 
 ## Getting started
 
+One command takes a fresh checkout to a ready local environment — it checks prerequisites,
+creates `.env` from `.env.example` if missing, installs dependencies, starts Postgres and applies
+migrations, and builds the workspace packages:
+
+```bash
+pnpm bootstrap            # get to "ready"
+pnpm bootstrap --start    # ...and also run all three apps (console-api, worker, console-web)
+```
+
+`pnpm bootstrap` is plain Node (no dependencies) and runs the same on Windows, macOS, and Linux. It is
+idempotent, so re-running it is safe. If Docker is not running it stops early and tells you how to
+start it; if `node_modules` is a broken cross-platform install (no `.bin`), it reinstalls cleanly.
+See [`scripts/setup.mjs`](scripts/setup.mjs); the pure helpers are covered by `pnpm test:setup`.
+
+<details>
+<summary>Prefer to run the steps by hand?</summary>
+
 ```bash
 pnpm install
 cp .env.example .env
@@ -103,6 +120,8 @@ and that step deliberately does **not** require `DATABASE_URL` — `generate` ne
 database, so a fresh clone installs cleanly before any `.env` exists (see the comment in
 `packages/db/prisma.config.ts`). The commands that do connect need it: `pnpm compose:up` (whose
 migration step reads it) and running either app.
+
+</details>
 
 `.env.example` documents the environment variables the apps read:
 
