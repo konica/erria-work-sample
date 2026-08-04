@@ -19,7 +19,7 @@ function assertServerEnv(): void {
 async function main() {
   // Resolved (and, for an unrecognised value, thrown) before anything else runs: a public review
   // console can never risk booting into a mode that would send real mail (ADR-0007).
-  resolveDispatchMode(process.env.MESSAGE_DISPATCH_MODE, { warn: console.warn });
+  const dispatchMode = resolveDispatchMode(process.env.MESSAGE_DISPATCH_MODE, { warn: console.warn });
 
   if (jobArg) {
     const jobName = jobArg.slice('--job='.length);
@@ -30,7 +30,7 @@ async function main() {
   assertServerEnv();
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const server = buildServer({ prisma, anthropic });
+  const server = buildServer({ prisma, anthropic, dispatchMode });
   const port = process.env.WORKER_PORT ? Number(process.env.WORKER_PORT) : 3100;
   await server.listen({ port, host: '0.0.0.0' });
 

@@ -11,4 +11,14 @@ export class WorkerClient {
       throw new Error(`Worker returned ${response.status} for trigger ${triggerId}`);
     }
   }
+
+  async dispatchMessage(messageId: string): Promise<void> {
+    const baseUrl = process.env.WORKER_INTERNAL_URL ?? 'http://localhost:3100';
+    const response = await fetch(`${baseUrl}/internal/dispatch-message/${messageId}`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error(`Worker returned ${response.status} dispatching message ${messageId}`);
+    }
+  }
 }
