@@ -23,3 +23,10 @@ export function slugify(title) {
 export function branchNameFor(number, title) {
   return `worktree-ticket-${number}-${slugify(title)}`;
 }
+
+export function selectBatch(issues, max) {
+  return issues
+    .filter((issue) => issue.state === 'OPEN' && issue.assignees.length === 0 && issue.blockedBy === 0)
+    .sort((a, b) => a.number - b.number)
+    .slice(0, max);
+}
