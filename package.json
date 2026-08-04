@@ -10,6 +10,8 @@
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r --workspace-concurrency=1 run test",
     "test:setup": "node --test scripts/setup.test.mjs",
+    "dispatch": "node scripts/dispatch-tickets.mjs",
+    "test:dispatch": "node --test scripts/dispatch-tickets.test.mjs",
     "compose:up": "docker compose up -d --wait && pnpm --filter @erria/db exec prisma migrate deploy",
     "compose:down": "docker compose down",
     "compose:reset": "docker compose down -v && pnpm compose:up"
