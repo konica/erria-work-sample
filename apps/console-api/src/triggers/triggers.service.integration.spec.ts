@@ -130,4 +130,66 @@ describe('TriggersService', () => {
     expect(accounts[0].id).toBe(existing.id);
     expect(accounts[0].companyName).toBe('New Name Shipping');
   });
+
+  it('upserts the contact so the account has a recipient for dispatch', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [TriggersService, WorkerClient, { provide: PRISMA, useValue: testDb.prisma }],
+    }).compile();
+    const service = moduleRef.get(TriggersService);
+
+    await service.receiveTrigger({
+      account: {
+        externalRef: 'crm-acc-contact-001',
+        companyName: 'Vinh Long Coastal',
+        segment: 'Coastal freight operator',
+        hub: 'Haiphong',
+        icpScore: 60,
+        icpBand: 'med',
+        relationshipSummary: 'New account',
+      },
+      contact: { name: 'Ms. Lan Pham', role: 'Technical Superintendent', email: 'lan.pham@example.com' },
+      category: 'life-raft service window',
+      description: 'test',
+      source: 'public_data',
+      confidenceLabel: 'mid',
+      verifiabilityNote: 'test',
+      detectedAt: new Date().toISOString(),
+      hasComplianceDeadlineContent: false,
+    });
+
+    const account = await testDb.prisma.account.findUniqueOrThrow({
+      where: { externalRef: 'crm-acc-contact-001' },
+      include: { contacts: true },
+    });
+    expect(account.contacts).toHaveLength(1);
+    expect(account.contacts[0].email).toBe('lan.pham@example.com');
+
+    // A second trigger for the same contact updates rather than duplicating.
+    await service.receiveTrigger({
+      account: {
+        externalRef: 'crm-acc-contact-001',
+        companyName: 'Vinh Long Coastal',
+        segment: 'Coastal freight operator',
+        hub: 'Haiphong',
+        icpScore: 60,
+        icpBand: 'med',
+        relationshipSummary: 'New account',
+      },
+      contact: { name: 'Ms. Lan Pham', role: 'Chief Engineer', email: 'lan.pham@example.com' },
+      category: 'EPIRB battery expiry',
+      description: 'test',
+      source: 'public_data',
+      confidenceLabel: 'mid',
+      verifiabilityNote: 'test',
+      detectedAt: new Date().toISOString(),
+      hasComplianceDeadlineContent: false,
+    });
+
+    const refreshed = await testDb.prisma.account.findUniqueOrThrow({
+      where: { externalRef: 'crm-acc-contact-001' },
+      include: { contacts: true },
+    });
+    expect(refreshed.contacts).toHaveLength(1);
+    expect(refreshed.contacts[0].role).toBe('Chief Engineer');
+  });
 });
