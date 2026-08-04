@@ -15,6 +15,9 @@ export class TriggersService {
   async receiveTrigger(dto: IncomingTriggerDto) {
     const account = await this.upsertAccount(dto.account);
     const vessel = dto.vessel ? await this.upsertVessel(account.id, dto.vessel) : null;
+    if (dto.contact) {
+      await this.upsertContact(account.id, dto.contact);
+    }
 
     const { triggerId } = await recordIncomingTrigger(this.prisma, {
       accountId: account.id,
@@ -83,6 +86,25 @@ export class TriggersService {
       where: { imo: input.imo },
       update: { name: input.name, flag: input.flag, accountId },
       create: { accountId, name: input.name, imo: input.imo, flag: input.flag },
+    });
+  }
+
+  private async upsertContact(accountId: string, input: NonNullable<IncomingTriggerDto['contact']>) {
+    // Contact has no unique constraint to upsert against (a person is identified by their email
+    // within an account, but email is nullable), so match explicitly then insert or update.
+    const existing = input.email
+      ? await this.prisma.contact.findFirst({ where: { accountId, email: input.email } })
+      : await this.prisma.contact.findFirst({ where: { accountId, name: input.name } });
+
+    if (existing) {
+      return this.prisma.contact.update({
+        where: { id: existing.id },
+        data: { name: input.name, role: input.role, email: input.email ?? null },
+      });
+    }
+
+    return this.prisma.contact.create({
+      data: { accountId, name: input.name, role: input.role, email: input.email ?? null },
     });
   }
 }

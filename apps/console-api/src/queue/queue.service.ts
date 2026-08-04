@@ -17,7 +17,7 @@ export class QueueService {
     const [items, total] = await Promise.all([
       this.prisma.message.findMany({
         where,
-        include: { account: true, trigger: { include: { vessel: true } } },
+        include: { account: { include: { contacts: true } }, trigger: { include: { vessel: true } } },
         orderBy: { createdAt: 'asc' },
         skip: (params.page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
@@ -30,10 +30,7 @@ export class QueueService {
         accountId: message.accountId,
         company: message.account.companyName,
         vessel: message.trigger?.vessel?.name ?? null,
-        // Contact enrichment isn't wired into the incoming-trigger payload yet
-        // (Task 9's DTO has no contact field) — always null until a later plan
-        // adds it. Documented gap, not a bug.
-        contact: null as string | null,
+        contact: message.account.contacts[0]?.name ?? null,
         triggerSummary: message.trigger?.description ?? null,
         icpBand: message.account.icpBand,
         tier: message.tierContext,

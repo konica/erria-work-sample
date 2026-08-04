@@ -27,6 +27,12 @@ export class IncomingVesselDto {
   @IsString() flag!: string;
 }
 
+export class IncomingContactDto {
+  @IsString() name!: string;
+  @IsString() role!: string;
+  @IsOptional() @IsString() email?: string;
+}
+
 export class IncomingTriggerDto {
   @ValidateNested() @Type(() => IncomingAccountDto) account!: IncomingAccountDto;
 
@@ -34,6 +40,11 @@ export class IncomingTriggerDto {
   @ValidateNested()
   @Type(() => IncomingVesselDto)
   vessel?: IncomingVesselDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => IncomingContactDto)
+  contact?: IncomingContactDto;
 
   @IsString() category!: string;
   @IsString() description!: string;
