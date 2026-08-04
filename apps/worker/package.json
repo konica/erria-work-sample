@@ -14,6 +14,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@erria/db": "workspace:*",
+    "@erria/domain": "workspace:*",
     "fastify": "^5.2.0"
   },
   "devDependencies": {
