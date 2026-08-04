@@ -12,3 +12,6 @@ export { resolveDispatchMode, DISPATCH_MODES } from './dispatch/dispatch-mode.js
 export type { DispatchMode, ResolveDispatchModeDeps } from './dispatch/dispatch-mode.js';
 export { dispatchMessage } from './dispatch/dispatch-message.js';
 export type { DispatchMessageInput, DispatchMessageResult } from './dispatch/dispatch-message.js';
+export { buildSubjectLine } from './dispatch/subject-line.js';
+export type { SubjectLineInput } from './dispatch/subject-line.js';
+export { recordCleanApproval } from './tiering/record-clean-approval.js';

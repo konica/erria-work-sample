@@ -1,16 +1,19 @@
 import type { PrismaClient } from '@erria/db';
 import type { DispatchMode } from './dispatch-mode.js';
+import { buildSubjectLine } from './subject-line.js';
+import { recordCleanApproval } from '../tiering/record-clean-approval.js';
 import { NotImplementedFlowError } from '../errors.js';
 
 export interface DispatchMessageInput {
   messageId: string;
 }
 
-export interface DispatchMessageResult {
-  messageId: string;
-  status: 'sent';
-  sentAt: Date;
-}
+export type DispatchMessageResult =
+  | { messageId: string; status: 'sent'; sentAt: Date; cleanApprovalCounted: boolean }
+  | { messageId: string; status: 'already_sent' }
+  | { messageId: string; status: 'refused'; reason: 'not_approved' | 'escalated' }
+  | { messageId: string; status: 'unsendable'; reason: 'no_contact_email' }
+  | { messageId: string; status: 'not_found' };
 
 /**
  * The one place in the domain that reads a dispatch mode and branches on it (application
@@ -32,10 +35,63 @@ export async function dispatchMessage(
     );
   }
 
-  const message = await deps.prisma.message.update({
+  const message = await deps.prisma.message.findUnique({
     where: { id: input.messageId },
-    data: { status: 'sent', sentAt: new Date() },
+    include: {
+      account: { include: { contacts: true } },
+      trigger: { include: { vessel: true } },
+    },
   });
 
-  return { messageId: message.id, status: 'sent', sentAt: message.sentAt as Date };
+  if (!message) {
+    return { messageId: input.messageId, status: 'not_found' };
+  }
+
+  // Idempotent by design: the reconciliation sweep (and a retried async call) can invoke this for
+  // a message that already went out. Sending twice is worse than doing nothing.
+  if (message.status === 'sent') {
+    return { messageId: message.id, status: 'already_sent' };
+  }
+
+  if (message.status !== 'approved') {
+    return { messageId: message.id, status: 'refused', reason: 'not_approved' };
+  }
+
+  // Re-checked here, not just at approval time: an escalation can open in the window between a
+  // human approving and this dispatch running.
+  const blocking = await deps.prisma.escalation.findFirst({
+    where: { accountId: message.accountId, status: 'active', agentSendDisabled: true },
+  });
+  if (blocking) {
+    return { messageId: message.id, status: 'refused', reason: 'escalated' };
+  }
+
+  const recipient = message.account.contacts.find((contact) => contact.email)?.email;
+  if (!recipient) {
+    return { messageId: message.id, status: 'unsendable', reason: 'no_contact_email' };
+  }
+
+  const subject = buildSubjectLine({
+    companyName: message.account.companyName,
+    vesselName: message.trigger?.vessel?.name ?? null,
+    triggerCategory: message.trigger?.category ?? null,
+  });
+
+  // No real mail provider (a stated non-goal) — `sandbox` renders what would have been sent and
+  // calls nothing external, while performing the exact same persistence a real send would.
+  console.log(`[dispatch:sandbox] to=${recipient} subject=${JSON.stringify(subject)}`);
+
+  const sent = await deps.prisma.message.update({
+    where: { id: message.id },
+    data: { role: 'agent_sent', status: 'sent', sentAt: new Date() },
+  });
+
+  const cleanApprovalCounted = await recordCleanApproval(deps.prisma, message.id);
+
+  return {
+    messageId: sent.id,
+    status: 'sent',
+    sentAt: sent.sentAt as Date,
+    cleanApprovalCounted,
+  };
 }
