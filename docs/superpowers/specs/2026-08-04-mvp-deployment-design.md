@@ -343,6 +343,13 @@ defaults to off (autonomous-send design §6) and Tier 1 is only ever earned (ADR
 4. Audit sampling verified working — the design guarantees an account's **first** autonomous send is
    always sampled regardless of rate, so that sample must actually appear for review.
 5. Both team members know how to switch it off, and the switch has been tested in the off direction.
+6. Issue #40 is resolved. `Message.tierContext` is currently written from `Account.currentTier`,
+   contradicting [ADR-0003](../../adr/0003-hard-trigger-rule-5-message-level-cap.md) — which means the
+   Hard-Trigger Rule 5 message-level cap is silently ignored. That corrupts Clean Approval counting,
+   and Clean Approvals are the only route to Tier 1 (ADR-0004), so an account could reach autonomous
+   sending on approvals that should never have counted. It does not block any deployment ticket
+   (#53–#63 neither read nor write `tierContext`) and is deliberately deferred until then; it does
+   block this switch.
 
 A useful framing correction: the safety of deferring the autonomous path does **not** come from a
 "grace period" while accounts earn Tier 1. The promotion threshold is a configurable setting (default 2
