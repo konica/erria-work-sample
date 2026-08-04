@@ -1,6 +1,6 @@
 # Parallel Ticket Dispatch — Design
 
-Status: Approved design — pending implementation plan
+Status: Draft — §5/§6 pending verification (see §6) before this can be marked approved
 Last updated: 2026-08-04
 
 ## 1. Problem
@@ -55,10 +55,12 @@ ticket added with a `Blocked by: #N` line becomes dispatchable the poll after #N
 
 ## 4. Per-ticket dispatch
 
-For each dispatchable ticket, up to the concurrency cap (§6), the polling session spawns one
-`Agent` call with `isolation: "worktree"`. This mirrors the existing convention — worktree branch
-named `worktree-ticket-<N>-<slug>`, one PR per ticket — so parallel dispatch doesn't introduce a
-new branching model, just runs more of the existing one at once.
+For each dispatchable ticket, up to the concurrency cap (§6), one agent is dispatched to work it in
+its own git worktree (branch named `worktree-ticket-<N>-<slug>`, matching the existing convention),
+producing one PR per ticket — so parallel dispatch doesn't introduce a new branching model, just
+runs more of the existing one at once. Exactly how that agent is launched (a separately-triggered
+`RemoteTrigger` run per ticket, or an `Agent` call with `isolation: "worktree"` fanned out from one
+dispatcher tick) is the open question in §6; the steps below are the same either way.
 
 Each per-ticket agent is briefed to:
 
@@ -76,32 +78,49 @@ Dispatchable tickets are launched together, with no staggering by file/schema ov
 (e.g. a shared Prisma schema touched by two tickets unblocked in the same poll) surfaces as an
 ordinary merge conflict on whichever PR is reviewed second — resolved at merge time, not upfront.
 
-## 5. Monitoring
+## 5. Monitoring — wants per-ticket visibility in `claude agents`
 
-Per-ticket agents are subagents of whichever polling session dispatched them, not independent
-top-level `claude` sessions — they report back to that session when done. Since each poll is its
-own short-lived session (§6), this means results are relayed from a session that itself exits soon
-after dispatching, rather than appearing as separate entries in the operator's own top-level
-agent-monitoring view. This is a known trade-off of dispatching via the `Agent` tool; revisit if
-that separation turns out to matter in practice once this is running.
+The operator wants each in-flight ticket to appear as its own entry when checking `claude agents`
+from another terminal, not just one entry per poll. That rules out fanning out via the `Agent`
+tool from inside a single dispatcher session: `Agent`-spawned subagents are scoped to their parent
+session and are explicitly documented as not independently visible to the user ("its final report
+is not visible to the user... send a text message back to the user with a concise summary") — only
+the one session that dispatched them would show up.
 
-## 6. Scheduled dispatch loop
+## 6. Scheduled dispatch loop — mechanism pending verification
 
-A standing scheduled job (built with the `schedule` skill / a `CronCreate` routine) runs every
-**30 minutes**, independent of any chat session, and on each tick:
+Two candidate mechanisms were considered for making the dispatcher itself durable (independent of
+any chat session, so it keeps running after this conversation ends):
 
-1. Computes the frontier (§3) live from GitHub.
-2. Counts tickets currently **in flight** — `ready-for-agent`, open, and assigned (claimed by a
-   prior tick but not yet merged/closed).
-3. Dispatches new tickets from the frontier up to a total in-flight cap of **5**, i.e. it launches
-   `min(cap - in_flight, |frontier|)` agents this tick. If more tickets are dispatchable than the
-   remaining cap allows, lowest issue number goes first.
-4. Exits. The next tick repeats independently — there is no explicit "wave" state to advance; the
-   frontier and in-flight count fully describe what to do next.
+- **`CronCreate`** — ruled out. Its actual contract is session-scoped: jobs live only in the
+  session that created them, are gone when that session exits, auto-expire after 7 days regardless,
+  and only fire while that session's REPL is idle. That contradicts "runs independent of any chat
+  session," so it can't be the durable dispatcher.
+- **`RemoteTrigger`** (the API behind the `schedule` skill) — a server-side routine with its own
+  `claude.ai` URL, genuinely independent of any session. This is the intended mechanism, but two
+  things about it are **unverified**:
+  1. Whether a single triggered run can be parameterized per-invocation (e.g. "work ticket #14"),
+     which is required if each ticket gets its own separately-triggered run rather than one run
+     fanning out internally.
+  2. Whether each triggered run shows up as its own independent entry in `claude agents`, which is
+     the whole point of choosing this mechanism over `Agent`-based fan-out (§5).
 
-This replaces manually triggering each wave: new tickets a PM adds, and tickets that unblock as
-PRs merge, are picked up automatically within one poll interval, with no operator action required
-to advance to the next batch of work.
+Both attempts to check this from the current (background, worktree-isolated) session failed —
+`RemoteTrigger list` returned `Unable to get organization UUID`, and the `schedule` skill reported
+it couldn't connect to the claude.ai account. This looks like an environment limitation of this
+particular session rather than a fundamental block, so **the operator will verify from their own
+interactive terminal** (where the account is connected) before this section is finalized:
+
+- Confirm `RemoteTrigger`/`/schedule` connects and can create a routine at all.
+- Confirm a routine run can be parameterized per-invocation with a specific ticket number.
+- Confirm each run appears as an independent entry in `claude agents`.
+
+Pending that, the intended shape (subject to the above being confirmed) is: a dispatcher tick
+computes the frontier (§3) and current in-flight count, then fires one separately-parameterized
+`RemoteTrigger` run **per dispatchable ticket** (up to the cap of 5 in flight), instead of one run
+that internally fans out via `Agent`. If per-invocation parameterization turns out not to be
+possible, this design falls back to the `Agent`-fan-out shape from the previous revision, with the
+per-ticket visibility gap in §5 accepted rather than solved.
 
 ## 7. Stale claims (known gap, manual for now)
 
