@@ -1,8 +1,28 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <title>Erria Outreach Agent Console</title>
+    <script>
+      // Sets `data-theme` before first paint so there's no flash of the wrong theme.
+      // Runs synchronously, before React loads, so it can't import
+      // src/shell/theme-bootstrap.ts — this mirrors resolveInitialTheme() there exactly;
+      // keep both in sync if the resolution logic changes.
+      (function () {
+        try {
+          var stored = localStorage.getItem('erria-theme');
+          var theme =
+            stored === 'dark' || stored === 'light'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
