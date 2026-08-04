@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '@erria/db';
+import { resolveDispatchMode } from '@erria/domain';
 import { buildServer } from './server.js';
 import { runJob } from './jobs/run-job.js';
 
@@ -16,6 +17,10 @@ function assertServerEnv(): void {
 }
 
 async function main() {
+  // Resolved (and, for an unrecognised value, thrown) before anything else runs: a public review
+  // console can never risk booting into a mode that would send real mail (ADR-0007).
+  resolveDispatchMode(process.env.MESSAGE_DISPATCH_MODE, { warn: console.warn });
+
   if (jobArg) {
     const jobName = jobArg.slice('--job='.length);
     await runJob(jobName);
