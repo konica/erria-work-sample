@@ -77,8 +77,10 @@ const fail = (msg) => {
 // pnpm is a `.cmd` shim on Windows, which CreateProcess can't launch directly, so
 // route through `cmd.exe /c` there. We pass args as a real argv (not `shell: true`,
 // which concatenates them and trips DEP0190); every arg here is a static literal.
-function platformCommand(cmd, args) {
-  if (IS_WIN) return [process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', cmd, ...args]];
+// On POSIX (Linux/macOS) the command runs directly — pnpm/docker resolve via PATH.
+// `isWin` is a parameter so both branches can be unit-tested on either platform.
+export function platformCommand(cmd, args, isWin = IS_WIN) {
+  if (isWin) return [process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', cmd, ...args]];
   return [cmd, args];
 }
 
@@ -209,6 +211,10 @@ async function startApps() {
     const child = spawn(file, fileArgs, {
       cwd: ROOT,
       env: childEnv,
+      // POSIX: give each app its own process group so shutdown can signal the whole
+      // tree (pnpm → `node --watch` → node). Not on Windows — `detached` would open a
+      // separate console window there; we use `taskkill /T` instead.
+      detached: !IS_WIN,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const tag = c(app.color, `[${app.label}]`);
@@ -237,9 +243,21 @@ async function startApps() {
     console.log('\nStopping apps…');
     for (const child of children) {
       if (child.pid === undefined) continue;
-      // pnpm dev spawns a `node --watch` grandchild that holds the port; kill the tree.
-      if (IS_WIN) spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-      else child.kill('SIGTERM');
+      // pnpm dev spawns a `node --watch` grandchild that holds the port; kill the
+      // whole tree, not just the direct child.
+      if (IS_WIN) {
+        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+      } else {
+        try {
+          process.kill(-child.pid, 'SIGTERM'); // negative pid → the child's process group
+        } catch {
+          try {
+            child.kill('SIGTERM');
+          } catch {
+            /* already exited */
+          }
+        }
+      }
     }
     setTimeout(() => process.exit(0), 500);
   };

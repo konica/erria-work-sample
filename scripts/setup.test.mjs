@@ -4,7 +4,19 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { parseEnvFile, isBrokenInstall } from './setup.mjs';
+import { parseEnvFile, isBrokenInstall, platformCommand } from './setup.mjs';
+
+test('platformCommand: POSIX runs the command directly', () => {
+  const [file, args] = platformCommand('pnpm', ['--filter', 'worker', 'dev'], false);
+  assert.equal(file, 'pnpm');
+  assert.deepEqual(args, ['--filter', 'worker', 'dev']);
+});
+
+test('platformCommand: Windows routes through cmd.exe /c', () => {
+  const [file, args] = platformCommand('pnpm', ['install'], true);
+  assert.match(file, /cmd\.exe$/i);
+  assert.deepEqual(args, ['/d', '/s', '/c', 'pnpm', 'install']);
+});
 
 test('parseEnvFile: parses KEY=VALUE pairs', () => {
   const env = parseEnvFile('DATABASE_URL=postgresql://erria:erria@localhost:5432/erria_dev\nWORKER_PORT=3100\n');
