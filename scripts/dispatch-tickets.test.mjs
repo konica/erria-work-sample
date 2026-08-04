@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { slugify, branchNameFor, selectBatch, buildPrompt } from './dispatch-tickets.mjs';
+import { slugify, branchNameFor, selectBatch, buildPrompt, parseJobId } from './dispatch-tickets.mjs';
 
 test('slugify: strips a leading "<number> — " prefix and lowercases', () => {
   assert.equal(slugify('12 — An approved message actually sends'), 'an-approved-message-actually-sends');
@@ -83,4 +83,20 @@ test('buildPrompt: instructs leaving the issue open for the PR merge to close it
 test('buildPrompt: instructs the PR title format', () => {
   const prompt = buildPrompt({ number: 12, title: 'An approved message actually sends', branch: 'b', repo: 'r' });
   assert.match(prompt, /"Ticket #12 — An approved message actually sends"/);
+});
+
+test('parseJobId: extracts the id from `claude --bg`\'s "backgrounded · <id>" output', () => {
+  const output = [
+    'backgrounded · b3a1ebc8',
+    '  claude agents             list sessions',
+    '  claude attach b3a1ebc8    open in this terminal',
+    '  claude logs b3a1ebc8      show recent output',
+    '  claude stop b3a1ebc8      stop this session',
+    '',
+  ].join('\n');
+  assert.equal(parseJobId(output), 'b3a1ebc8');
+});
+
+test('parseJobId: returns null when the output has no job id', () => {
+  assert.equal(parseJobId('some unexpected output'), null);
 });
