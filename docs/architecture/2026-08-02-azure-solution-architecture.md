@@ -1,7 +1,19 @@
 # Azure Solution Architecture — Erria Outreach Agent
 
-Status: Draft — pending user review
-Last updated: 2026-08-02
+Status: **Target state, deferred.** Superseded for the MVP / stakeholder-review phase by
+[ADR-0007](../adr/0007-mvp-deploys-to-one-vm-with-docker-compose.md) and
+[`docs/superpowers/specs/2026-08-04-mvp-deployment-design.md`](../superpowers/specs/2026-08-04-mvp-deployment-design.md),
+which deploy to a single VM running docker-compose for ~$44/month. This document remains the
+destination for when the MVP outgrows one box; ADR-0007 lists the triggers to come back to it.
+
+**Two corrections apply before anything here is provisioned** — §10's cost model priced idle
+containers at active rates and overstates the total by roughly 2×, and §3/§7 omit two choices that are
+**permanent at Postgres server creation** (networking mode, geo-redundant backup). Both are detailed,
+with rates verified against the Azure retail price API, in §13 of the MVP deployment design. §8's alert
+list also predates [ADR-0006](../adr/0006-autonomous-send-designed-deferrals-lifted.md) and covers
+autonomous sending nowhere.
+
+Last updated: 2026-08-04 (status and corrections; body otherwise as written 2026-08-02)
 Scope grounding: [`docs/superpowers/specs/2026-08-01-outreach-agent-design.md`](../superpowers/specs/2026-08-01-outreach-agent-design.md),
 [`ideation/scenario-research.md`](../../ideation/scenario-research.md),
 [`ideation/open-design-brief-landing-login.md`](../../ideation/open-design-brief-landing-login.md),
@@ -342,6 +354,14 @@ it.
   doesn't currently need.
 
 ## 10. Monthly cost ballpark (Azure infrastructure only)
+
+> **Superseded — see §13 of the [MVP deployment design](../superpowers/specs/2026-08-04-mvp-deployment-design.md).**
+> The table below prices every container at Container Apps' **active** rate. Azure bills a min-replica
+> container at a reduced **idle** rate ($0.000004 vs $0.000034 per vCPU-second in West Europe), and
+> grants 180,000 vCPU-seconds + 360,000 GiB-seconds free **per subscription** per month. Verified
+> totals are roughly **half** the figures here: ~$68–90/month for both environments, not $100–160.
+> Also note that private endpoints **on a Container Apps environment** carry a $73/month Dedicated Plan
+> Management fee, and that B2s is 4× B1ms rather than a near neighbour.
 
 Rough, single-region, pay-as-you-go estimates in USD (actual pricing varies by exact region/SKU
 availability and should be confirmed in the Azure pricing calculator before committing):
