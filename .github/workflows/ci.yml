@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No explicit `version:` here — pnpm/action-setup@v4 errors
+      # (ERR_PNPM_BAD_PM_VERSION risk) if one is given alongside package.json's
+      # `packageManager` field, which already pins pnpm@10.0.0.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # console-api, worker, and domain all resolve @erria/db's types through
+      # package.json's `types` field (./dist/index.d.ts). `postinstall` only runs
+      # `prisma generate`, not the `tsc` half of this package's `build` script, so
+      # without this step typecheck below fails to find @erria/db's type declarations.
+      - run: pnpm --filter @erria/db run build
+
+      # Same reasoning for @erria/domain: console-api and worker both import it, and
+      # its dist/index.d.ts only exists after this package's own build runs tsc.
+      - run: pnpm --filter @erria/domain run build
+
+      - run: pnpm run lint
+
+      - run: pnpm run typecheck
+
+      # Root `test` script runs workspace suites serially (--workspace-concurrency=1):
+      # every package's integration tests start their own Testcontainers Postgres, and
+      # running several concurrently races them on one Docker daemon (see 1406b39).
+      - run: pnpm run test
+        env:
+          ANTHROPIC_API_KEY: sk-test-placeholder-not-a-real-key
