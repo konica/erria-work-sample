@@ -22,16 +22,23 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # @erria/db's dependents (console-api, worker, domain) resolve its types through
+      # console-api, worker, and domain all resolve @erria/db's types through
       # package.json's `types` field (./dist/index.d.ts). `postinstall` only runs
       # `prisma generate`, not the `tsc` half of this package's `build` script, so
       # without this step typecheck below fails to find @erria/db's type declarations.
       - run: pnpm --filter @erria/db run build
 
-      - run: pnpm -r run lint
+      # Same reasoning for @erria/domain: console-api and worker both import it, and
+      # its dist/index.d.ts only exists after this package's own build runs tsc.
+      - run: pnpm --filter @erria/domain run build
 
-      - run: pnpm -r run typecheck
+      - run: pnpm run lint
 
-      - run: pnpm -r run test
+      - run: pnpm run typecheck
+
+      # Root `test` script runs workspace suites serially (--workspace-concurrency=1):
+      # every package's integration tests start their own Testcontainers Postgres, and
+      # running several concurrently races them on one Docker daemon (see 1406b39).
+      - run: pnpm run test
         env:
           ANTHROPIC_API_KEY: sk-test-placeholder-not-a-real-key
