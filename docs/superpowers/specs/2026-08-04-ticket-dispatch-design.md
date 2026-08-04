@@ -1,6 +1,6 @@
 # Parallel Ticket Dispatch — Design
 
-Status: Draft — pending a live test run of `scripts/dispatch-tickets.sh` (confirm its
+Status: Draft — pending a live test run of `scripts/dispatch-tickets.mjs` (confirm its
 background-launch line and `claude agents` visibility; see §5)
 Last updated: 2026-08-04
 
@@ -77,12 +77,12 @@ unattended) were evaluated and both rejected:
   an individual account**, so dropped rather than pursued further — no amount of retrying from a
   different session fixes an account-tier limitation.
 
-With both ruled out, the chosen mechanism is `scripts/dispatch-tickets.sh`, run manually whenever a
+With both ruled out, the chosen mechanism is `scripts/dispatch-tickets.mjs`, run manually whenever a
 batch should be dispatched:
 
 ```
-scripts/dispatch-tickets.sh              # auto-compute the frontier (§2), dispatch up to MAX=3
-scripts/dispatch-tickets.sh 10 11 15     # or dispatch these specific ticket numbers
+node scripts/dispatch-tickets.mjs              # auto-compute the frontier (§2), dispatch up to MAX=3
+node scripts/dispatch-tickets.mjs 10 11 15     # or dispatch these specific ticket numbers
 ```
 
 Either way, a candidate is skipped if it's already assigned or has an open blocker. For each ticket
@@ -93,10 +93,12 @@ agents` (the goal in §4) without needing anything server-side. Worktree branch
 `worktree-ticket-<n>-<slug>`, logs under `.claude/dispatch-logs/`, one PR per ticket per §3.
 
 This is a manual, per-invocation tool, not a poller: nothing runs unattended between invocations,
-and re-running it is how new PM tickets or newly-unblocked tickets get picked up. The one line that
-starts each session (`claude -p "$prompt" > "$logfile" 2>&1 &`) is a best-effort default, not yet
-verified against how sessions are actually started in this environment — confirm before relying on
-it.
+and re-running it is how new PM tickets or newly-unblocked tickets get picked up. Its decision logic
+(`slugify`, `branchNameFor`, `selectBatch`, `buildPrompt`) is unit-tested in
+`scripts/dispatch-tickets.test.mjs`, matching this repo's existing `scripts/setup.mjs` convention.
+The `spawn('claude', ['-p', prompt], { detached: true, ... })` call in `dispatchOne()` is a
+best-effort default, not yet verified against how sessions are actually started in this
+environment — confirm before relying on it.
 
 **Was the `Workflow` tool considered instead?** Yes, and it doesn't fit either of the two things
 this needs. `Workflow` is a tool available *within* a Claude session (mine, in this conversation),
