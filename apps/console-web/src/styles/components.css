@@ -1,0 +1,169 @@
+/*
+ * Reusable component CSS ported from brainstorm/mockup/Erria-outreach-agent-v07/outreach-console.html
+ * — the classes here are shared across more than one screen (badge is in badges.css instead, since
+ * that file already owns the whole badge component). See docs/reviews/2026-08-03-frontend-layout-approach.md
+ * §1/§5 for why the split between this file and screens.css falls where it does.
+ *
+ * House rule: the mockup's classes use short, screen-scoped prefixes (q-, esc-, tp-, sa-, tl-, doss-)
+ * precisely so new class names don't collide — keep using a prefix when adding a class for a new
+ * screen, and grep `src/styles` before introducing one that isn't already in use.
+ */
+
+/* ---------- Shared bits: section head, rationale line ---------- */
+.section-head { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+.section-head h2 { font-size: 13px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+.section-head .hint { font-size: 12px; color: var(--faint); }
+.divider-note { font-size: 12px; color: var(--muted); margin: 2px 0 14px; max-width: 62ch; }
+
+/* ICP fit meter */
+.icp { display: inline-flex; align-items: center; gap: 8px; }
+.icp-bars { display: inline-flex; gap: 2px; }
+.icp-bars i { width: 5px; height: 13px; border-radius: 1px; background: var(--border-strong); display: inline-block; }
+.icp.high .icp-bars i:nth-child(-n+3) { background: var(--ok-fg); }
+.icp.med .icp-bars i:nth-child(-n+2) { background: var(--warn-fg); }
+.icp.low .icp-bars i:nth-child(-n+1) { background: var(--t3-fg); }
+.icp .icp-label { font-size: 11px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* rationale line — always paired with a tier badge */
+.why { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: var(--muted); line-height: 1.35; }
+.why svg { width: 12px; height: 12px; flex: 0 0 auto; transform: translateY(1px); color: var(--faint); }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--border-strong); background: var(--panel); color: var(--fg); padding: 8px 13px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; transition: background .12s, border-color .12s, transform .05s; }
+.btn:hover { border-color: var(--faint); }
+.btn:active { transform: translateY(1px); }
+.btn svg { width: 15px; height: 15px; }
+.btn.sm { padding: 6px 10px; font-size: 12px; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: var(--on-brand); box-shadow: var(--shadow-btn); }
+.btn.primary:hover { background: var(--brand-strong); border-color: var(--brand-strong); }
+.btn.danger { color: var(--t3-fg); border-color: var(--t3-bd); background: var(--t3-bg); }
+.btn.danger:hover { border-color: var(--t3-fg); }
+.btn.warn { color: var(--t2-fg); border-color: var(--t2-bd); background: var(--t2-bg); }
+.btn.warn:hover { border-color: var(--t2-fg); }
+.btn.block { width: 100%; }
+kbd { font-family: var(--mono); font-size: 10.5px; font-weight: 600; background: color-mix(in oklch, currentColor 12%, transparent); border: 1px solid color-mix(in oklch, currentColor 22%, transparent); border-radius: 4px; padding: 1px 5px; line-height: 1.4; }
+
+/* filter/status chip pill — count matches the sidebar nav badge treatment */
+.chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+.chip:hover { border-color: var(--border-strong); color: var(--fg); }
+.chip.active { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+.chip .n { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 11px; font-weight: 600; background: var(--surface); border: 1px solid var(--border); color: var(--muted); padding: 1px 7px; border-radius: 999px; margin-left: 2px; }
+.chip:hover .n { color: var(--fg); }
+.chip.active .n { background: color-mix(in oklch, var(--bg) 22%, transparent); border-color: transparent; color: var(--bg); }
+
+/* message thread + inline draft editor (Review split, reused by Send Audit's expanded row) */
+.thread { display: flex; flex-direction: column; gap: 14px; margin-bottom: 4px; }
+.msg { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; background: var(--panel); }
+.msg .m-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+.msg .m-head svg { width: 14px; height: 14px; }
+.msg .m-who { font-weight: 600; color: var(--fg); }
+.msg .m-when { color: var(--faint); margin-left: auto; font-variant-numeric: tabular-nums; }
+.msg .m-body { font-size: 13.5px; line-height: 1.6; color: var(--fg); }
+.msg.inbound { background: var(--surface); }
+.msg.draft { border-color: var(--brand-tint); box-shadow: 0 0 0 1px var(--brand-tint); }
+.draft-flag { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--brand-strong); }
+.draft-flag svg { width: 13px; height: 13px; }
+
+.draft-edit { width: 100%; border: 1px solid var(--brand); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); font: inherit; font-size: 13.5px; line-height: 1.6; padding: 12px 14px; resize: vertical; min-height: 150px; outline: none; }
+.draft-edit:focus { box-shadow: 0 0 0 3px var(--brand-tint); }
+
+/* hard-rule / policy tags below a draft */
+.policy-tags { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 4px; }
+.policy-tag { display: flex; align-items: flex-start; gap: 9px; font-size: 12px; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--t2-bd); background: var(--t2-bg); color: var(--t2-fg); }
+.policy-tag svg { width: 14px; height: 14px; flex: 0 0 auto; transform: translateY(1px); }
+.policy-tag b { font-weight: 700; }
+.policy-tag .pt-body { color: var(--fg); font-weight: 400; }
+.policy-tag.info { border-color: var(--border); background: var(--surface); color: var(--muted); }
+.policy-tag.info svg { color: var(--brand); }
+.policy-tag.hard { border-left-width: 3px; border-left-color: var(--t2-fg); box-shadow: 0 1px 2px rgba(0,0,0,.05); padding: 11px 13px; }
+.policy-tag.hard svg { color: var(--t2-fg); }
+
+/* decision bar — the most prominent element on a review screen; Account Detail re-skins it as a static card, see screens.css */
+.decision {
+  position: sticky; bottom: 0;
+  margin: 20px -24px -22px; padding: 16px 24px;
+  background: color-mix(in oklch, var(--panel) 92%, transparent);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.decision .d-lead { font-size: 12px; color: var(--muted); margin-right: auto; display: flex; align-items: center; gap: 8px; }
+.decision .d-lead svg { width: 14px; height: 14px; color: var(--brand); }
+.decision .btn.primary { padding: 10px 20px; font-size: 13.5px; }
+.decision-done { display: flex; align-items: center; gap: 10px; margin-right: auto; font-weight: 600; font-size: 13px; }
+.decision-done.approved { color: var(--ok-fg); }
+.decision-done.rejected { color: var(--t3-fg); }
+.decision-done svg { width: 18px; height: 18px; }
+
+/* dossier — the account-summary rail; Account Detail's info tab reflows it as a 2-column grid, see screens.css */
+.dossier h3 { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); margin: 0 0 12px; display: flex; align-items: center; gap: 7px; }
+.dossier h3 svg { width: 13px; height: 13px; }
+.doss-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px; margin-bottom: 14px; box-shadow: var(--shadow-card); }
+.doss-row { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.doss-row:last-child { border-bottom: 0; }
+.doss-row .k { color: var(--muted); flex: 0 0 auto; }
+.doss-row .v { text-align: right; font-weight: 600; }
+.contact-block { display: flex; align-items: center; gap: 11px; }
+.contact-block .avatar { width: 34px; height: 34px; font-size: 12px; background: var(--surface); color: var(--brand-strong); border: 1px solid var(--border); }
+.contact-block .cb-name { font-weight: 700; font-size: 13px; }
+.contact-block .cb-role { font-size: 11.5px; color: var(--muted); }
+
+.tier-panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px; margin-bottom: 14px; box-shadow: var(--shadow-card); }
+.tier-panel .tp-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tier-panel .tp-top .lbl { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+.tier-panel .tp-why { font-size: 12.5px; color: var(--fg); line-height: 1.5; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); border-left: 3px solid var(--t2-fg); }
+.progress-dots { display: flex; align-items: center; gap: 6px; margin-top: 11px; font-size: 11.5px; color: var(--muted); }
+.progress-dots .pd { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--border-strong); }
+.progress-dots .pd.on { background: var(--ok-fg); border-color: var(--ok-fg); }
+
+.trust-block { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); padding: 10px 12px; }
+.trust-head { display: flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; color: var(--fg); margin-bottom: 6px; }
+.trust-head svg { width: 13px; height: 13px; color: var(--brand); }
+.confidence { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.dot.hi { background: var(--ok-fg); } .dot.mid { background: var(--warn-fg); } .dot.lo { background: var(--t3-fg); }
+
+/* shared timeline renderer — Audit Trail's own timeline plus Tier History's manual-entry variant */
+.timeline { position: relative; margin: 6px 0 0; padding-left: 8px; }
+.tl-item { position: relative; padding: 16px 0 16px 34px; border-left: 2px solid var(--border); }
+.tl-item:last-child { border-left-color: transparent; }
+.tl-item::before { content: ""; position: absolute; left: -8px; top: 20px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel); border: 2px solid var(--border-strong); }
+.tl-item.promote::before { border-color: var(--ok-fg); background: var(--ok-bg); }
+.tl-item.demote::before, .tl-item.escalate::before { border-color: var(--t3-fg); background: var(--t3-bg); }
+.tl-item.create::before { border-color: var(--brand); background: var(--brand-tint); }
+.tl-item.current::before { border-color: var(--t2-fg); background: var(--t2-bg); box-shadow: 0 0 0 4px var(--t2-bg); }
+.tl-when { font-size: 11px; font-weight: 600; color: var(--faint); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.tl-title { display: flex; align-items: center; gap: 9px; margin: 4px 0 5px; }
+.tl-title .tt { font-size: 13.5px; font-weight: 600; }
+.tl-reason { font-size: 12.5px; color: var(--muted); line-height: 1.5; max-width: 62ch; }
+/* manual Tier History entry — visibly distinct from automatic entries */
+.tl-item.manual::before { border-color: var(--brand); background: var(--brand-tint); }
+.tl-manual { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--brand-strong); background: var(--brand-tint); border: 1px solid color-mix(in oklch, var(--brand) 26%, transparent); border-radius: 999px; padding: 2px 8px; }
+.tl-manual svg { width: 11px; height: 11px; }
+
+/* toast */
+.toast-wrap { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 50; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.toast { display: flex; align-items: center; gap: 10px; background: var(--fg); color: var(--bg); padding: 11px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 600; box-shadow: var(--shadow-pop); animation: rise .22s ease; }
+.toast svg { width: 16px; height: 16px; }
+.toast.ok svg { color: #4ade80; }
+.toast.warn svg { color: #fbbf24; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* empty state */
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--muted); text-align: center; padding: 40px; }
+.empty svg { width: 34px; height: 34px; color: var(--faint); }
+.empty .btn { margin-top: 6px; }
+
+/* pagination — shared by the Queue and Send Audit tables */
+.pager { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 4px 2px; }
+.pager .p-info { font-size: 12px; color: var(--muted); margin-right: auto; font-variant-numeric: tabular-nums; }
+.pager .p-btns { display: flex; align-items: center; gap: 4px; }
+.pager button { min-width: 32px; height: 32px; padding: 0 9px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pager button:hover:not(:disabled) { border-color: var(--border-strong); color: var(--fg); }
+.pager button.on { background: var(--brand-tint); border-color: color-mix(in oklch, var(--brand) 24%, transparent); color: var(--brand-strong); }
+.pager button:disabled { opacity: .4; cursor: default; }
+.pager .p-ell { color: var(--faint); padding: 0 2px; }
+
+/* worklist intro line — shared by any cross-account flat-list screen (Queue, Review, Escalations, Audit) */
+.worklist-note { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
+.worklist-note svg { color: var(--brand); }

@@ -1,8 +1,10 @@
 /*
  * One import point for the app's global CSS, in cascade order. `tokens.css` pulls in
- * `design-system-tokens.css` itself. Ticket #44 adds `components.css`/`screens.css` here.
+ * `design-system-tokens.css` itself.
  */
 @import "./tokens.css";
 @import "./base.css";
 @import "./layout.css";
 @import "./badges.css";
+@import "./components.css";
+@import "./screens.css";

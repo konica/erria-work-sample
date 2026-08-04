@@ -5,8 +5,11 @@
  * else — see docs/reviews/2026-08-03-frontend-layout-approach.md §0 for why this file exists at
  * all: `design-system-tokens.css` and the mockup's own vocabulary are almost entirely disjoint.
  *
- * `--warn-bg`/`--warn-bd` are intentionally absent below — the mockup itself never defines them
- * (only `--warn-fg`), which is a gap in the mockup, not something dropped here. See ticket #44.
+ * `--warn-bg`/`--warn-bd` are a defect fix, not a port: the mockup references them in
+ * `.repeat-banner`/`.confirm-inline` but never defines them (only `--warn-fg`). `--warn-fg` is
+ * byte-identical to `--t2-fg` in both themes, so the warn family is derived from the corresponding
+ * tier-2 amber values below, pending designer confirmation — see
+ * ideation/open-design-brief-v08-corrections.md. See ticket #44.
  */
 @import "./design-system-tokens.css";
 
@@ -33,7 +36,7 @@
   --t3-fg: #b91c1c; --t3-bg: #fdeceb; --t3-bd: #f2bcb8;   /* Tier 3 — escalated */
   --esc-fg: #b91c1c; --esc-bg: #fdeceb; --esc-bd: #f2bcb8; /* Escalated flag */
   --ok-fg: #15803d; --ok-bg: #e9f6ee; --ok-bd: #bfe3cc;
-  --warn-fg: #b45309;
+  --warn-fg: #b45309; --warn-bg: #fdf3e0; --warn-bd: #f0d4a2; /* derived from --t2-bg/--t2-bd — see comment above */
 
   /* logo chip is ALWAYS dark navy (only a transparent-white mark exists) */
   --chip: #0f172a;
@@ -70,7 +73,7 @@
   --t3-fg: #f87171; --t3-bg: #3a1e20; --t3-bd: #63302f;
   --esc-fg: #f87171; --esc-bg: #3a1e20; --esc-bd: #63302f;
   --ok-fg: #4ade80; --ok-bg: #15301f; --ok-bd: #275033;
-  --warn-fg: #fbbf24;
+  --warn-fg: #fbbf24; --warn-bg: #362a12; --warn-bd: #5c4a1e; /* derived from --t2-bg/--t2-bd — see comment above */
 
   --shadow-card: 0 1px 2px rgba(0,0,0,.4);
   --shadow-pop: 0 16px 40px rgba(0,0,0,.55);
