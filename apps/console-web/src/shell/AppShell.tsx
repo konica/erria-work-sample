@@ -4,8 +4,8 @@ import { Sidebar } from './Sidebar.js';
 import type { ScreenKey } from './screens.js';
 
 /*
- * No router yet (that's ticket #45's job) — the only screen the app can show today is the
- * queue, so the active nav item and header crumb/title are fixed here rather than derived.
+ * No router yet — the only screen the app can show today is the queue, so the active nav
+ * item and header crumb/title are fixed here rather than derived.
  */
 const ACTIVE_SCREEN: ScreenKey = 'queue';
 

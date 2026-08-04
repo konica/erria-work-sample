@@ -7,6 +7,8 @@ import { AccountsController } from './accounts/accounts.controller.js';
 import { AccountsService } from './accounts/accounts.service.js';
 import { TriggersController } from './triggers/triggers.controller.js';
 import { TriggersService } from './triggers/triggers.service.js';
+import { NavCountsController } from './nav-counts/nav-counts.controller.js';
+import { NavCountsService } from './nav-counts/nav-counts.service.js';
 
 // Regression guard for #35.
 //
@@ -93,5 +95,20 @@ describe('controller constructor injection (regression guard for #35)', () => {
       triggerId: 'trigger-1',
     });
     expect(receiveTrigger).toHaveBeenCalledWith(dto);
+  });
+
+  it('injects NavCountsService into NavCountsController', async () => {
+    const get = vi.fn().mockResolvedValue({ review: 3, escalation: 1 });
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [NavCountsController],
+      providers: [{ provide: NavCountsService, useValue: { get } }],
+    }).compile();
+
+    await expect(moduleRef.get(NavCountsController).get()).resolves.toEqual({
+      review: 3,
+      escalation: 1,
+    });
+    expect(get).toHaveBeenCalled();
   });
 });

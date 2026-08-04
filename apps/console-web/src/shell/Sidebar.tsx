@@ -1,7 +1,10 @@
 import { NavItem } from './NavItem.js';
 import { SCREENS, type ScreenKey } from './screens.js';
+import { useNavCounts } from './useNavCounts.js';
 
 export function Sidebar({ active }: { active: ScreenKey }) {
+  const counts = useNavCounts();
+
   return (
     <aside className="rail">
       <div className="brand">
@@ -16,12 +19,18 @@ export function Sidebar({ active }: { active: ScreenKey }) {
 
       <div className="nav-label">Workspace</div>
       <NavItem icon={SCREENS.queue.icon} label={SCREENS.queue.label} active={active === 'queue'} />
-      <NavItem icon={SCREENS.review.icon} label={SCREENS.review.label} active={active === 'review'} />
+      <NavItem
+        icon={SCREENS.review.icon}
+        label={SCREENS.review.label}
+        active={active === 'review'}
+        count={counts?.review}
+      />
       <NavItem
         icon={SCREENS.escalation.icon}
         label={SCREENS.escalation.label}
         active={active === 'escalation'}
         variant="attention"
+        count={counts?.escalation}
       />
       <NavItem icon={SCREENS.audit.icon} label={SCREENS.audit.label} active={active === 'audit'} />
 

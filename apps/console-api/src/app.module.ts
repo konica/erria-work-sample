@@ -4,9 +4,10 @@ import { HealthController } from './health/health.controller.js';
 import { QueueModule } from './queue/queue.module.js';
 import { AccountsModule } from './accounts/accounts.module.js';
 import { TriggersModule } from './triggers/triggers.module.js';
+import { NavCountsModule } from './nav-counts/nav-counts.module.js';
 
 @Module({
-  imports: [PrismaModule, QueueModule, AccountsModule, TriggersModule],
+  imports: [PrismaModule, QueueModule, AccountsModule, TriggersModule, NavCountsModule],
   controllers: [HealthController],
 })
 export class AppModule {}
