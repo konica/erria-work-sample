@@ -10,9 +10,10 @@ unit) that will draft, tier, and escalate outbound messages to accounts based on
 triggers, with a human in the loop for anything below full autonomy.
 
 This is a job-application work sample. **It is currently a walking skeleton, not a working
-product**: the monorepo, database schema, and both runtime processes exist and are wired
-together, but the actual outreach logic (drafting, tiering, hard-trigger escalation) has not been
-built yet. See [Status](#status) below for exactly what is and isn't implemented.
+product**: the monorepo, database schema, all three processes, and the tiering and drafting logic
+exist, but nothing joins them up. No flow turns an incoming trigger into a tiered, drafted message,
+and hard-trigger escalation does not exist — the console reads whatever is already in the database.
+See [Status](#status) below for exactly what is and isn't implemented.
 
 ## Status
 
@@ -34,24 +35,40 @@ built yet. See [Status](#status) below for exactly what is and isn't implemented
   `GET /health`, plus a `--job=<name>` CLI entrypoint stub (`followup-cadence`,
   `audit-sample-maintenance`, `stuck-send-reconciliation`) that validates the job name and
   currently no-ops — the real job bodies land in later plans.
+- `apps/console-web`: a React 19 + Vite single-page console. There is no router — `App` renders one
+  view, `QueuePage`, which fetches `/api/queue` on mount and renders the queue as a table (company,
+  vessel, trigger summary, and a tier badge), with explicit loading and error states. Styling is
+  design tokens plus badge rules, not a UI framework. Covered by a Testing Library/Vitest test. The
+  dev server proxies `/api` and `/internal` to `console-api` on port 3000, so the browser talks to
+  one origin.
+- `compose.yaml`: the local runtime dependencies (today just PostgreSQL 17, on a named volume with
+  a TCP healthcheck), driven by the `compose:up` / `compose:down` / `compose:reset` root scripts.
+  See [Local dependencies](#local-dependencies).
 
 **Not yet built:**
 
-- `apps/console-web` is an empty placeholder directory (no source, no `package.json`) reserved for
-  the console frontend.
 - Nothing orchestrates the domain modules yet: no end-to-end flow turns an incoming trigger into a
-  tiered, drafted message, and no hard-trigger escalation exists. The worker never calls
-  `@erria/domain`.
+  tiered, drafted message, and no hard-trigger escalation exists. Neither app imports
+  `@erria/domain` outside of test config, so the console reads data that something else has to put
+  there — the queue is populated by hand today, since there is no seed script either.
+- `@erria/domain` has no package entry point. It declares `main: ./dist/index.js`, but there is no
+  `src/index.ts` for `tsc` to emit one from, so importing the package by name fails the same way
+  `@erria/db` does before a build. Harmless while nothing imports it; whatever wires the domain in
+  first will need to add the barrel file (or import the module paths directly).
+- The console is read-only: it lists the queue but cannot approve, edit, or send anything, and
+  there are no write endpoints behind it.
 - No CI workflow is configured in this checkout.
 
 This covers the "foundation" slice of Plan 1 (see
 [`docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md`](docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md))
-plus the tiering, drafting, and read-endpoint tickets, on the way to Flow 1 ("a trigger arrives and
-becomes a Tier 2 draft awaiting approval").
+plus the tiering, drafting, read-endpoint, console-UI and local-runtime tickets, on the way to
+Flow 1 ("a trigger arrives and becomes a Tier 2 draft awaiting approval"). What is missing for
+Flow 1 is the wiring: something that runs on a trigger, calls the domain modules, and writes the
+resulting draft back for the console to show.
 
 ## Architecture
 
-A pnpm workspace monorepo with two runtime processes sharing internal library packages, rather
+A pnpm workspace monorepo with three runtime processes sharing internal library packages, rather
 than separate deployed services — see
 [ADR-0001](docs/adr/0001-modular-monolith-not-microservices.md) for why.
 
@@ -59,7 +76,7 @@ than separate deployed services — see
 apps/
   console-api/   NestJS app (Express adapter) — human-facing API: health + queue/account reads
   worker/        Fastify app — background/orchestration process, health check + job stub today
-  console-web/   placeholder — no source yet
+  console-web/   React + Vite SPA — the console UI, proxies /api to console-api in dev
 packages/
   db/            Prisma schema, generated client, Testcontainers test helper (@erria/db)
   domain/        framework-free business logic — tiering and drafting (@erria/domain)
@@ -243,7 +260,8 @@ apps/
   console-api/    NestJS (Express) — src/main.ts, src/app.module.ts, src/health/, src/prisma/,
                   src/queue/, src/accounts/
   worker/         Fastify — src/main.ts, src/server.ts, src/jobs/run-job.ts
-  console-web/    empty placeholder
+  console-web/    React + Vite — index.html, vite.config.ts, src/App.tsx, src/QueuePage.tsx,
+                  src/styles/
 packages/
   db/             prisma/schema.prisma, prisma/migrations/, src/client.ts, src/test-utils/
   domain/         src/tiering/, src/drafting/, src/errors.ts (@erria/domain)

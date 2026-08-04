@@ -1,0 +1,21 @@
+/*
+ * Reset and base typography, ported verbatim from
+ * brainstorm/mockup/Erria-outreach-agent-v07/outreach-console.html (lines 84-100).
+ */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button { font-family: inherit; cursor: pointer; }
+/* Base icon size — every inline <svg> is an icon; without this, unconstrained
+   svgs fall back to the SVG default (~300×150) and render as huge blobs.
+   Component rules override where needed. */
+svg { width: 16px; height: 16px; vertical-align: -0.15em; }
+::selection { background: color-mix(in oklch, var(--brand) 25%, transparent); }

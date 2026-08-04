@@ -1,5 +1,10 @@
+import { AppShell } from './shell/AppShell.js';
 import { QueuePage } from './QueuePage.js';
 
 export function App() {
-  return <QueuePage />;
+  return (
+    <AppShell>
+      <QueuePage />
+    </AppShell>
+  );
 }

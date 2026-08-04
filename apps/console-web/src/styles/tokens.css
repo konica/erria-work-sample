@@ -1,52 +1,81 @@
 /*
- * Copied verbatim from `design-system/tokens.css`, which remains the source of truth — re-copy
- * on changes rather than editing this file directly, until a later plan wires up a proper
- * shared-package or build-time symlink for it.
+ * The mockup's full token superset (brainstorm/mockup/Erria-outreach-agent-v07/outreach-console.html
+ * lines 18-82), aliased onto `design-system-tokens.css`'s primitives where the names genuinely
+ * correspond (--bg, --surface, --border, --fg, --muted, --brand), and copied verbatim everywhere
+ * else — see docs/reviews/2026-08-03-frontend-layout-approach.md §0 for why this file exists at
+ * all: `design-system-tokens.css` and the mockup's own vocabulary are almost entirely disjoint.
+ *
+ * `--warn-bg`/`--warn-bd` are a defect fix, not a port: the mockup references them in
+ * `.repeat-banner`/`.confirm-inline` but never defines them (only `--warn-fg`). `--warn-fg` is
+ * byte-identical to `--t2-fg` in both themes, so the warn family is derived from the corresponding
+ * tier-2 amber values below, pending designer confirmation — see
+ * ideation/open-design-brief-v08-corrections.md. See ticket #44.
  */
+@import "./design-system-tokens.css";
 
-/*
- * Colors below are manually curated (see tokens.json "curated" notes and DESIGN.md) —
- * automated extraction from erria.dk returned an empty palette. "dark" theme values are a
- * designer extrapolation for this project; erria.dk itself has no dark theme.
- */
 :root {
-  --font-heading: Helvetica;
-  --font-body: Helvetica;
-  --space-1: 2px;
-  --space-2: 5px;
-  --space-3: 5.5px;
-  --space-4: 7px;
-  --space-5: 8px;
-  --space-6: 10px;
-  --space-7: 13px;
-  --space-8: 14.4px;
-  --space-9: 15px;
-  --space-10: 20px;
-  --space-11: 22.9531px;
-  --space-12: 25px;
-  --space-13: 30px;
-  --space-14: 94px;
-  --space-15: 100px;
-  --radius-1: 2px;
-  --radius-2: 3px;
-  --radius-3: 5px;
-  --radius-4: 6px;
-  --radius-5: 12px;
-  --shadow-1: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.23);
+  --bg: var(--color-background);
+  --surface: var(--color-surface);
+  --border: var(--color-border);
+  --fg: var(--color-text-primary);
+  --muted: var(--color-text-secondary);
+  --brand: var(--color-brand-primary);
 
-  --color-background: #ffffff;
-  --color-surface: #f5f4f7;
-  --color-border: #ebf0f7;
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #5a5a5a;
-  --color-brand-primary: #1e73be;
+  --panel: #ffffff;
+  --rail: #f7f8fb;
+  --border-strong: #dbe3ef;
+  --faint: #8a93a3;
+
+  --brand-strong: #1a66a8;
+  --brand-tint: #eaf2fa;
+  --on-brand: #ffffff;
+
+  /* status system — paired ALWAYS with a label + icon (never color-alone) */
+  --t1-fg: #475569; --t1-bg: #eef2f7; --t1-bd: #cdd8e6;   /* Tier 1 — autonomous, calm */
+  --t2-fg: #b45309; --t2-bg: #fdf3e0; --t2-bd: #f0d4a2;   /* Tier 2 — needs approval */
+  --t3-fg: #b91c1c; --t3-bg: #fdeceb; --t3-bd: #f2bcb8;   /* Tier 3 — escalated */
+  --esc-fg: #b91c1c; --esc-bg: #fdeceb; --esc-bd: #f2bcb8; /* Escalated flag */
+  --ok-fg: #15803d; --ok-bg: #e9f6ee; --ok-bd: #bfe3cc;
+  --warn-fg: #b45309; --warn-bg: #fdf3e0; --warn-bd: #f0d4a2; /* derived from --t2-bg/--t2-bd — see comment above */
+
+  /* logo chip is ALWAYS dark navy (only a transparent-white mark exists) */
+  --chip: #0f172a;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow-card: 0 1px 2px rgba(15,23,42,.05), 0 1px 3px rgba(15,23,42,.04);
+  --shadow-pop: 0 12px 28px rgba(15,23,42,.14), 0 4px 8px rgba(15,23,42,.08);
+  --shadow-btn: 0 1px 0 rgba(15,23,42,.06), 0 2px 6px rgba(30,115,190,.28);
+
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 [data-theme="dark"] {
-  --color-background: #0f172a;
-  --color-surface: #1a2438;
-  --color-border: #2a3650;
-  --color-text-primary: #f5f4f7;
-  --color-text-secondary: #9aa3b2;
-  --color-brand-primary: #4a9bd8;
+  --bg: var(--color-background);
+  --surface: var(--color-surface);
+  --border: var(--color-border);
+  --fg: var(--color-text-primary);
+  --muted: var(--color-text-secondary);
+  --brand: var(--color-brand-primary);
+
+  --panel: #151f33;
+  --rail: #131c2e;
+  --border-strong: #37456180;
+  --faint: #6b7688;
+
+  --brand-strong: #5aa8e0;
+  --brand-tint: #16304a;
+  --on-brand: #08111f;
+
+  --t1-fg: #94a3b8; --t1-bg: #1c2740; --t1-bd: #33415c;
+  --t2-fg: #fbbf24; --t2-bg: #362a12; --t2-bd: #5c4a1e;
+  --t3-fg: #f87171; --t3-bg: #3a1e20; --t3-bd: #63302f;
+  --esc-fg: #f87171; --esc-bg: #3a1e20; --esc-bd: #63302f;
+  --ok-fg: #4ade80; --ok-bg: #15301f; --ok-bd: #275033;
+  --warn-fg: #fbbf24; --warn-bg: #362a12; --warn-bd: #5c4a1e; /* derived from --t2-bg/--t2-bd — see comment above */
+
+  --shadow-card: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-pop: 0 16px 40px rgba(0,0,0,.55);
+  --shadow-btn: 0 1px 0 rgba(0,0,0,.3), 0 2px 8px rgba(74,155,216,.35);
 }
