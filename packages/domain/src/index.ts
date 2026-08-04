@@ -8,3 +8,7 @@ export type { DraftMessageInput, DraftMessageResult } from './drafting/draft-mes
 export { TONE_SYSTEM_PROMPT } from './drafting/tone-system-prompt.js';
 export { draftOutputSchema } from './drafting/draft-output-schema.js';
 export type { DraftOutput } from './drafting/draft-output-schema.js';
+export { resolveDispatchMode, DISPATCH_MODES } from './dispatch/dispatch-mode.js';
+export type { DispatchMode, ResolveDispatchModeDeps } from './dispatch/dispatch-mode.js';
+export { dispatchMessage } from './dispatch/dispatch-message.js';
+export type { DispatchMessageInput, DispatchMessageResult } from './dispatch/dispatch-message.js';
