@@ -94,7 +94,10 @@ function dispatchOne(issue, repo) {
   // it does its own backgrounding, so this call is synchronous and there's nothing to detach.
   // (`--bg` and `-p`/`--print` are mutually exclusive: `-p` never starts the session `claude
   // agents`/`claude attach` can attach to, so a `-p`-launched process is invisible there.)
-  const output = execFileSync('claude', ['--bg', prompt], { encoding: 'utf8' });
+  // `--permission-mode auto` so a dispatched ticket doesn't sit `blocked` waiting on a permission
+  // decision nobody's attached to answer -- `--dangerously-skip-permissions` is not used here since
+  // it's documented as only recommended for sandboxes with no internet access, which this isn't.
+  const output = execFileSync('claude', ['--bg', '--permission-mode', 'auto', prompt], { encoding: 'utf8' });
   return { branch, jobId: parseJobId(output) };
 }
 

@@ -115,12 +115,16 @@ and re-running it is how new PM tickets or newly-unblocked tickets get picked up
 (`slugify`, `branchNameFor`, `selectBatch`, `buildPrompt`, `parseJobId`) is unit-tested in
 `scripts/dispatch-tickets.test.mjs`, matching this repo's existing `scripts/setup.mjs` convention.
 
-One known operational gap this surfaces: a `claude --bg` job can end up `"state": "blocked"` if it
-hits a permission decision with nobody attached to answer it (observed on an unrelated pre-existing
-background job while investigating this). This script doesn't pass any `--permission-mode`, so a
-dispatched ticket can in principle sit blocked the same way — checking `claude agents` for a
-`blocked` state and running `claude attach <id>` to unblock it is, for now, part of the same manual
-oversight §6 already asks for with stale claims, not a separate mechanism.
+This surfaced one more operational gap, since fixed: a `claude --bg` job can end up
+`"state": "blocked"` if it hits a permission decision with nobody attached to answer it (observed
+on an unrelated pre-existing background job while investigating this). `dispatchOne()` now passes
+`--permission-mode auto`, so a dispatched ticket doesn't stall waiting on a decision no one's there
+to make. `--dangerously-skip-permissions` was considered and rejected here — it's documented as
+recommended only for sandboxes with no internet access, which this repo's tickets are not (they do
+real `gh`/git operations against GitHub). If a ticket still ends up `blocked` under `auto` mode for
+some decision `auto` doesn't cover, checking `claude agents` for that state and running
+`claude attach <id>` to resolve it manually remains part of the same manual oversight §6 already
+asks for with stale claims, not a separate mechanism.
 
 **Was the `Workflow` tool considered instead?** Yes, and it doesn't fit either of the two things
 this needs. `Workflow` is a tool available *within* a Claude session (mine, in this conversation),
