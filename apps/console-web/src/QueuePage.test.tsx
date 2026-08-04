@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueuePage } from './QueuePage.js';
 
@@ -31,7 +32,7 @@ describe('QueuePage', () => {
   });
 
   it('renders a queue row from the API', async () => {
-    render(<QueuePage />);
+    render(<QueuePage onOpenAccount={() => {}} />);
     await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
     expect(screen.getByText('MV Song Hong Pioneer')).toBeInTheDocument();
     expect(screen.getByText('Life-raft service window')).toBeInTheDocument();
@@ -39,7 +40,7 @@ describe('QueuePage', () => {
   });
 
   it('renders the row inside the styled q-table grid, not a bare <table>', async () => {
-    render(<QueuePage />);
+    render(<QueuePage onOpenAccount={() => {}} />);
     await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
 
     expect(document.querySelector('table.queue-table')).not.toBeInTheDocument();
@@ -49,11 +50,21 @@ describe('QueuePage', () => {
   });
 
   it('renders the ICP fit, tier rationale, and last-action fields the API provides', async () => {
-    render(<QueuePage />);
+    render(<QueuePage onOpenAccount={() => {}} />);
     await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
 
     expect(screen.getByText('High fit')).toBeInTheDocument();
     expect(screen.getByText('New account — rollout default')).toBeInTheDocument();
     expect(screen.getByText(new Date('2026-08-02T00:00:00.000Z').toLocaleString())).toBeInTheDocument();
+  });
+
+  it('opens the account when a row is clicked', async () => {
+    const onOpenAccount = vi.fn();
+    render(<QueuePage onOpenAccount={onOpenAccount} />);
+    await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByText('Song Hong Shipping').closest('.q-row')!);
+
+    expect(onOpenAccount).toHaveBeenCalledWith('acc_1');
   });
 });

@@ -43,7 +43,7 @@ function rowAccentFor(tier: number) {
   return tier === 3 ? 'esc' : tier === 2 ? 'needs' : 'calm';
 }
 
-export function QueuePage() {
+export function QueuePage({ onOpenAccount }: { onOpenAccount: (accountId: string) => void }) {
   const [data, setData] = useState<QueueResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,7 +70,19 @@ export function QueuePage() {
         <div>Last action</div>
       </div>
       {data.items.map((row) => (
-        <div className={`q-row ${rowAccentFor(row.tier)}`} key={row.accountId}>
+        <div
+          className={`q-row ${rowAccentFor(row.tier)}`}
+          key={row.accountId}
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpenAccount(row.accountId)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onOpenAccount(row.accountId);
+            }
+          }}
+        >
           <div className="acct">
             <div className="co">{row.company}</div>
             <div className="vessel">
