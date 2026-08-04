@@ -9,11 +9,11 @@ An AI-assisted sales outreach system for **Mermaid Maritime Vietnam** (an Erria 
 unit) that will draft, tier, and escalate outbound messages to accounts based on upstream
 triggers, with a human in the loop for anything below full autonomy.
 
-This is a job-application work sample. **It is currently a walking skeleton, not a working
-product**: the monorepo, database schema, all three processes, and the tiering and drafting logic
-exist, but nothing joins them up. No flow turns an incoming trigger into a tiered, drafted message,
-and hard-trigger escalation does not exist — the console reads whatever is already in the database.
-See [Status](#status) below for exactly what is and isn't implemented.
+This is a job-application work sample. **It is not yet a working product**: Flow 1 (an incoming
+trigger becomes a tiered, drafted message awaiting human approval) is wired end to end, but the
+console can only read that outcome, not act on it — there is no approve/edit/send path, and
+hard-trigger escalation does not exist yet. See [Status](#status) below for exactly what is and
+isn't implemented.
 
 ## Status
 
@@ -29,42 +29,58 @@ See [Status](#status) below for exactly what is and isn't implemented.
   (spec §3/§4 tier recommendations) and message drafting (`draftMessage`, its Zod output schema,
   and the tone system prompt). No framework imports, so it is testable without booting either app.
 - `apps/console-api`: a NestJS app that boots, validates `DATABASE_URL` at startup, and exposes
-  `GET /health`, `GET /api/queue` and `GET /api/accounts/:id`. Includes a global `PrismaModule`
-  (a `PRISMA` DI token) that feature modules build on.
-- `apps/worker`: a standalone Fastify server that boots, validates `DATABASE_URL`, and exposes
-  `GET /health`, plus a `--job=<name>` CLI entrypoint stub (`followup-cadence`,
-  `audit-sample-maintenance`, `stuck-send-reconciliation`) that validates the job name and
-  currently no-ops — the real job bodies land in later plans.
+  `GET /health`, `GET /api/queue`, `GET /api/accounts/:id`, `GET /api/nav-counts` (live sidebar
+  badge counts), and `POST /internal/triggers` — the Flow 1 entry point (see below). Includes a
+  global `PrismaModule` (a `PRISMA` DI token) that feature modules build on.
+- `apps/worker`: a standalone Fastify server that boots, validates `DATABASE_URL` and
+  `ANTHROPIC_API_KEY`, and exposes `GET /health`, `POST /internal/process-trigger/:triggerId` (the
+  drafting half of Flow 1, called by `console-api`), plus a `--job=<name>` CLI entrypoint stub
+  (`followup-cadence`, `audit-sample-maintenance`, `stuck-send-reconciliation`) that validates the
+  job name and currently no-ops — the real job bodies land in later plans.
 - `apps/console-web`: a React 19 + Vite single-page console. There is no router — `App` renders one
-  view, `QueuePage`, which fetches `/api/queue` on mount and renders the queue as a table (company,
-  vessel, trigger summary, and a tier badge), with explicit loading and error states. Styling is
-  design tokens plus badge rules, not a UI framework. Covered by a Testing Library/Vitest test. The
-  dev server proxies `/api` and `/internal` to `console-api` on port 3000, so the browser talks to
-  one origin.
+  view, `QueuePage`, inside an `AppShell` (sidebar with `Account Queue`/`Review`/`Escalations`/
+  `Audit Trail`/`Send Audit`/`Settings` nav items and live counts from `/api/nav-counts`, a header,
+  and a dark/light `ThemeToggle`). Only `Account Queue` renders real content today — the other nav
+  items are chrome, not routes. `QueuePage` fetches `/api/queue` on mount and renders the queue as a
+  table (company, vessel, trigger summary, and a tier badge), with explicit loading and error
+  states. Styling is design tokens plus badge rules, not a UI framework. Covered by a Testing
+  Library/Vitest test. The dev server proxies `/api` and `/internal` to `console-api` on port 3000,
+  so the browser talks to one origin.
+- **Flow 1, end to end**: `POST /internal/triggers` on `console-api` upserts the account/vessel,
+  tiers and persists the trigger via `@erria/domain`'s `recordIncomingTrigger` (Tier 2 only —
+  autonomous Tier 1 sending throws `NotImplementedFlowError`, see ADR-0002), then calls `worker`'s
+  `POST /internal/process-trigger/:triggerId`, which drafts a message with `@erria/domain`'s
+  `draftMessage` (a real call to the Claude API via `@anthropic-ai/sdk`) and persists the outcome:
+  a `pending_review` `Message` row on success, or `Trigger.status = 'needs_triage'` if the model
+  abstains or the call fails. Every attempt is logged to `LlmCall` regardless of outcome. With the
+  placeholder `ANTHROPIC_API_KEY` from `.env.example`, the Claude call fails with a 401 and the
+  trigger is correctly routed to `needs_triage` — set a real key to see a draft actually get
+  created.
 - `compose.yaml`: the local runtime dependencies (today just PostgreSQL 17, on a named volume with
   a TCP healthcheck), driven by the `compose:up` / `compose:down` / `compose:reset` root scripts.
   See [Local dependencies](#local-dependencies).
 
 **Not yet built:**
 
-- Nothing orchestrates the domain modules yet: no end-to-end flow turns an incoming trigger into a
-  tiered, drafted message, and no hard-trigger escalation exists. Neither app imports
-  `@erria/domain` outside of test config, so the console reads data that something else has to put
-  there — the queue is populated by hand today, since there is no seed script either.
-- `@erria/domain` has no package entry point. It declares `main: ./dist/index.js`, but there is no
-  `src/index.ts` for `tsc` to emit one from, so importing the package by name fails the same way
-  `@erria/db` does before a build. Harmless while nothing imports it; whatever wires the domain in
-  first will need to add the barrel file (or import the module paths directly).
-- The console is read-only: it lists the queue but cannot approve, edit, or send anything, and
-  there are no write endpoints behind it.
+- Hard-trigger escalation does not exist: `nav-counts` counts `Escalation` rows with
+  `status: 'active'` for the sidebar badge, but nothing ever creates one — no code path opens an
+  escalation from an inbound reply or a hard trigger.
+- The console is read-only: `Account Queue` lists the queue, but there is no UI for triggering
+  Flow 1, and no approve/edit/send actions or write endpoints exist behind the `Review`,
+  `Escalations`, `Audit Trail`, or `Send Audit` nav items — they render as static chrome with a live
+  count, not a page.
+- There is no seed script — any demo data in the database was put there by hand or via
+  `POST /internal/triggers` (see above), not by `compose:up` or a migration.
+- Autonomous Tier 1 sending is a documented gap (ADR-0002): `recordIncomingTrigger` throws
+  `NotImplementedFlowError` if tiering ever recommends Tier 1.
 - No CI workflow is configured in this checkout.
 
-This covers the "foundation" slice of Plan 1 (see
+This covers Plan 1 (see
 [`docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md`](docs/superpowers/plans/2026-08-02-outreach-agent-foundation-flow1.md))
-plus the tiering, drafting, read-endpoint, console-UI and local-runtime tickets, on the way to
-Flow 1 ("a trigger arrives and becomes a Tier 2 draft awaiting approval"). What is missing for
-Flow 1 is the wiring: something that runs on a trigger, calls the domain modules, and writes the
-resulting draft back for the console to show.
+through Flow 1 itself ("a trigger arrives and becomes a Tier 2 draft awaiting approval" — see the
+`POST /internal/triggers` walkthrough under [Running the apps](#running-the-apps)). What's left is
+everything downstream of a draft existing: a human acting on it (approve/edit/send), hard-trigger
+escalation, and the app-chrome nav items becoming real pages.
 
 ## Architecture
 
@@ -145,10 +161,10 @@ migration step reads it) and running either app.
 | Variable | Used by | Notes |
 | --- | --- | --- |
 | `DATABASE_URL` | `console-api`, `worker`, `packages/db` | Required at boot — both apps throw and exit if unset |
-| `ANTHROPIC_API_KEY` | nothing yet (`@anthropic-ai/sdk` is a dependency of `packages/domain` and `apps/worker`) | Still unconsumed: `draftMessage` takes an already-constructed client (`deps: { client }`), and nothing in this checkout constructs one, so the SDK never reads this |
+| `ANTHROPIC_API_KEY` | `worker` | Required at boot like `DATABASE_URL`. Used to construct the `Anthropic` client passed to `draftMessage` when `POST /internal/process-trigger/:id` runs. The placeholder value in `.env.example` boots fine but makes every draft call fail with a 401 — the trigger is then routed to `needs_triage` rather than crashing |
 | `CONSOLE_API_PORT` | `console-api` | Defaults to `3000` |
 | `WORKER_PORT` | `worker` | Defaults to `3100` |
-| `WORKER_INTERNAL_URL` | reserved for `console-api` → `worker` calls | Not yet consumed |
+| `WORKER_INTERNAL_URL` | `console-api` | Base URL `WorkerClient` calls to reach `worker`'s `POST /internal/process-trigger/:id`. Defaults to `http://localhost:3100` if unset |
 | `CONSOLE_WEB_ORIGIN` | `console-api` (CORS) | Unset means CORS is closed by default, not open |
 
 ## Local dependencies
@@ -206,11 +222,28 @@ curl http://localhost:3000/health   # { "status": "ok" }
 curl http://localhost:3100/health   # { "status": "ok" }
 ```
 
-`console-api` also serves two read endpoints:
+`console-api` also serves the read endpoints the console uses:
 
 ```bash
 curl http://localhost:3000/api/queue          # { "items": [], "total": 0, "page": 1, "pageSize": 20 }
 curl http://localhost:3000/api/accounts/<id>  # 404 when the account does not exist
+curl http://localhost:3000/api/nav-counts     # { "review": 0, "escalation": 0 }
+```
+
+...and one write endpoint, the Flow 1 entry point. It tiers and persists the trigger, then calls
+`worker` to draft a message (a real Claude API call — see [Status](#status)):
+
+```bash
+curl -X POST http://localhost:3000/internal/triggers -H 'Content-Type: application/json' -d '{
+  "account": { "externalRef": "acct-1", "companyName": "Acme Shipping", "segment": "Bulk carrier",
+    "hub": "Ho Chi Minh City", "icpScore": 72, "icpBand": "high", "relationshipSummary": "Quiet 3 months" },
+  "vessel": { "name": "MV Acme Star", "imo": "IMO1234567", "flag": "Vietnam" },
+  "category": "class_survey_due", "description": "Survey window opens in 30 days",
+  "source": "class_records", "confidenceLabel": "high",
+  "verifiabilityNote": "Confirmed via class society register",
+  "detectedAt": "2026-08-04T00:00:00.000Z", "hasComplianceDeadlineContent": false
+}'
+# { "triggerId": "<uuid>" }
 ```
 
 Both `dev` scripts run `node --watch --import @swc-node/register/esm-register`. SWC rather than
@@ -222,6 +255,15 @@ logs its mapped routes, and then 500s on the first request to any endpoint with 
 was [#35](https://github.com/konica/erria-work-sample/issues/35). `apps/console-api`'s Vitest config
 uses `unplugin-swc` for the same reason, and `src/controller-injection.spec.ts` guards against a
 regression.
+
+`worker` also serves `POST /internal/process-trigger/:triggerId` — the drafting half of Flow 1.
+`console-api` calls it after persisting a trigger; call it directly to re-run drafting for an
+existing trigger id without going through `console-api`:
+
+```bash
+curl -X POST http://localhost:3100/internal/process-trigger/<triggerId>
+# { "status": "drafted", "messageId": "<uuid>" } or { "status": "needs_triage" }
+```
 
 The worker also accepts a one-shot job invocation instead of starting the server. This path runs
 before the `DATABASE_URL` check, so it needs neither the database nor the exported environment:
@@ -245,26 +287,24 @@ pnpm typecheck   # pnpm -r run typecheck  — tsc --noEmit in each package
 pnpm test        # pnpm -r run test       — vitest run in each package
 ```
 
-`apps/console-web` has no `package.json` yet, so these currently run against 4 of the 5 directories
-under `apps/`/`packages/`.
-
 Running `pnpm test` runs the Testcontainers-backed integration tests in `packages/db` and
 `apps/console-api` (each spins up and tears down a real `postgres:17` container automatically)
-alongside the unit suites in `packages/domain` and `apps/worker` — no manual database setup
-required for `pnpm test` itself.
+alongside the unit suites in `packages/domain`, `apps/worker`, and `apps/console-web` — no manual
+database setup required for `pnpm test` itself.
 
 ## Project layout
 
 ```
 apps/
   console-api/    NestJS (Express) — src/main.ts, src/app.module.ts, src/health/, src/prisma/,
-                  src/queue/, src/accounts/
-  worker/         Fastify — src/main.ts, src/server.ts, src/jobs/run-job.ts
+                  src/queue/, src/accounts/, src/triggers/, src/nav-counts/, src/worker-client/
+  worker/         Fastify — src/main.ts, src/server.ts, src/routes/process-trigger.ts,
+                  src/jobs/run-job.ts
   console-web/    React + Vite — index.html, vite.config.ts, src/App.tsx, src/QueuePage.tsx,
-                  src/styles/
+                  src/shell/ (AppShell, Sidebar, Header, ThemeToggle, useNavCounts), src/styles/
 packages/
   db/             prisma/schema.prisma, prisma/migrations/, src/client.ts, src/test-utils/
-  domain/         src/tiering/, src/drafting/, src/errors.ts (@erria/domain)
+  domain/         src/index.ts, src/tiering/, src/drafting/, src/errors.ts (@erria/domain)
 docs/
   adr/            architecture decision records
   architecture/   application- and infra-architecture docs

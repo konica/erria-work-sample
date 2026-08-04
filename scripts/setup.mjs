@@ -141,7 +141,8 @@ function ensureEnv() {
   if (!existsSync(examplePath)) fail('.env is missing and .env.example was not found to copy from.');
   copyFileSync(examplePath, envPath);
   info('Created .env from .env.example');
-  warn('ANTHROPIC_API_KEY in .env is a placeholder — set a real key when the SDK is wired up.');
+  warn('ANTHROPIC_API_KEY in .env is a placeholder — worker needs a real key to draft messages');
+  warn('(a trigger still tiers and persists fine; drafting fails and the trigger goes to needs_triage).');
 }
 
 function workspaceNodeModules() {
