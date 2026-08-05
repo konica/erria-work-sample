@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiFetch } from '../api.js';
 
 export interface NavCounts {
   review: number;
@@ -9,7 +10,7 @@ export function useNavCounts(): NavCounts | null {
   const [counts, setCounts] = useState<NavCounts | null>(null);
 
   useEffect(() => {
-    fetch('/api/nav-counts')
+    apiFetch('/api/nav-counts')
       .then((response) => {
         if (!response.ok) throw new Error(`GET /api/nav-counts failed: ${response.status}`);
         return response.json();

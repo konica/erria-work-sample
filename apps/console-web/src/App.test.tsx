@@ -3,12 +3,47 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { App } from './App.js';
 
+const initAuth = vi.fn().mockResolvedValue(undefined);
+// useNavCounts (rendered inside AppShell once authenticated) calls apiFetch, which pulls
+// getAccessToken/reportUnauthorized from this same module — stub the full surface, not just
+// initAuth, or that call throws and the test only passes by accident of a swallowed error.
+vi.mock('./auth/authStore.js', () => ({
+  initAuth: () => initAuth(),
+  getAccessToken: () => null,
+  reportUnauthorized: () => {},
+}));
+
+const useAuthMock = vi.fn();
+vi.mock('./auth/useAuth.js', () => ({ useAuth: () => useAuthMock() }));
+
 function emptyList() {
   return { ok: true, json: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }) };
 }
 
+describe('App auth gating', () => {
+  it('renders nothing while the initial session check is in flight, rather than flashing Landing', () => {
+    useAuthMock.mockReturnValue({ view: 'loading', login: vi.fn(), logout: vi.fn() });
+
+    const { container } = render(<App />);
+
+    expect(container).toBeEmptyDOMElement();
+    expect(initAuth).toHaveBeenCalled();
+  });
+
+  it('renders the auth gate when there is no active session', () => {
+    useAuthMock.mockReturnValue({ view: 'landing', login: vi.fn(), logout: vi.fn() });
+
+    render(<App />);
+
+    expect(
+      screen.getByText('Internal console for reviewing and sending AI-drafted customer outreach, and handling escalations.'),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('App navigation', () => {
   beforeEach(() => {
+    useAuthMock.mockReturnValue({ view: 'authenticated', login: vi.fn(), logout: vi.fn() });
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
@@ -23,9 +58,10 @@ describe('App navigation', () => {
     );
   });
 
-  it('shows the queue table by default', async () => {
+  it('shows the queue table by default — not the auth gate — once authenticated', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByText('Account / Vessel')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Log in' })).not.toBeInTheDocument();
   });
 
   it('navigates to the Send Audit screen when its nav item is clicked', async () => {
