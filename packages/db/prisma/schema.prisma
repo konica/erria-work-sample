@@ -109,6 +109,7 @@ enum SentimentFloor {
 enum LlmCallPurpose {
   draft_generation
   hard_trigger_classification
+  handoff_generation
 }
 
 enum LlmCallOutcome {
