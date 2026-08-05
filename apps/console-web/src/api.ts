@@ -14,6 +14,26 @@ export interface AccountDetail {
   pendingMessage: { id: string; body: string; edited: boolean; tierContext: number } | null;
 }
 
+export interface SettingsPayload {
+  basic: { tier1PromotionThreshold: number; tier1AuditSampleRate: number };
+  advanced: {
+    maxFollowups: number;
+    minDaysBetweenFollowups: number;
+    sentimentConfidenceFloor: 'Low' | 'Medium' | 'High';
+  };
+  locked: {
+    hardTriggerRules: { key: string; label: string; description: string }[];
+    rolloutOverlayEnabled: boolean;
+    rolloutOverlayDescription: string;
+  };
+}
+
+export interface AdvancedSettingsProposal {
+  requiresConfirmation: boolean;
+  diff: { field: string; from: string | number; to: string | number }[];
+  notice: string;
+}
+
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) throw new Error(`Request failed: ${response.status}`);
   return response.json() as Promise<T>;
@@ -38,6 +58,29 @@ export const api = {
     fetch(`/api/accounts/${accountId}/messages/${messageId}/reject`, { method: 'POST' }).then(
       json<{ message: { id: string; status: string } }>,
     ),
+
+  getSettings: () => fetch('/api/settings').then(json<SettingsPayload>),
+
+  saveBasicSettings: (basic: SettingsPayload['basic']) =>
+    fetch('/api/settings/basic', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(basic),
+    }).then(json<SettingsPayload>),
+
+  proposeAdvancedSettings: (advanced: SettingsPayload['advanced']) =>
+    fetch('/api/settings/advanced', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(advanced),
+    }).then(json<AdvancedSettingsProposal>),
+
+  confirmAdvancedSettings: (advanced: SettingsPayload['advanced']) =>
+    fetch('/api/settings/advanced/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(advanced),
+    }).then(json<SettingsPayload>),
 };
 
 export interface AuditSampleRow {

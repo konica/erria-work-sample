@@ -28,6 +28,7 @@ export type IconName =
   | 'xc'
   | 'robot'
   | 'flag'
+  | 'lock'
   | 'chevron';
 
 const PATHS: Record<IconName, ReactNode> = {
@@ -129,6 +130,12 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   flag: <path d="M4 21V4h13l-2 4 2 4H4" />,
+  lock: (
+    <>
+      <rect x={4} y={11} width={16} height={10} rx={2} />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
   chevron: <path d="m6 9 6 6 6-6" />,
 };
 
