@@ -134,6 +134,71 @@ interface AuditSampleList {
   pageSize: number;
 }
 
+export interface EscalationSummary {
+  id: string;
+  accountId: string;
+  company: string;
+  rule: string;
+  reasonSummary: string;
+  recommendedNextStep: string;
+  status: 'active' | 'resolved';
+  repeatOfResolutionId: string | null;
+  createdAt: string;
+}
+
+export type OutcomeTag = 'closed_won' | 're_engaged' | 'no_response' | 'churned' | 'closed_no_action';
+
+export interface PriorResolution {
+  id: string;
+  actionTaken: string;
+  outcomeTag: string;
+  rule: string;
+  resolvedAt: string;
+}
+
+export const escalationApi = {
+  list: (status: 'active' | 'resolved' = 'active') =>
+    apiFetch(`/api/escalations?status=${status}`).then(json<{ items: EscalationSummary[] }>),
+
+  priorResolutions: (accountId: string) =>
+    apiFetch(`/api/accounts/${accountId}/resolutions`).then(json<{ items: PriorResolution[] }>),
+
+  resolve: (
+    accountId: string,
+    escId: string,
+    payload: {
+      actionType: 'mark_resolved' | 'compose_send';
+      actionTaken: string;
+      followupBody?: string;
+      outcomeTag: OutcomeTag;
+    },
+  ) =>
+    apiFetch(`/api/accounts/${accountId}/escalations/${escId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(json<{ escalation: { id: string; status: string } }>),
+
+  link: (accountId: string, escId: string, resolutionId: string) =>
+    apiFetch(`/api/accounts/${accountId}/escalations/${escId}/link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolutionId }),
+    }).then(json<{ escalation: { id: string; repeatOfResolutionId: string | null } }>),
+
+  unlink: (accountId: string, escId: string) =>
+    apiFetch(`/api/accounts/${accountId}/escalations/${escId}/link`, { method: 'DELETE' }).then(
+      json<{ escalation: { id: string; repeatOfResolutionId: string | null } }>,
+    ),
+
+  changeTier: (accountId: string, tier: 2 | 3, reason: string) =>
+    apiFetch(`/api/accounts/${accountId}/tier`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tier, reason }),
+    }).then(json<{ account: { id: string; currentTier: number } }>),
+};
+
 export const auditApi = {
   list: (status?: 'unreviewed' | 'fine' | 'concerning') =>
     apiFetch(status ? `/api/audit-samples?status=${status}` : '/api/audit-samples').then(
