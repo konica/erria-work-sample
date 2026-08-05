@@ -52,8 +52,12 @@ export function SendAuditPage() {
   }, []);
 
   async function mark(id: string, verdict: 'fine' | 'concerning') {
-    await auditApi.mark(id, verdict);
-    await refresh();
+    try {
+      await auditApi.mark(id, verdict);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to record verdict');
+    }
   }
 
   if (error) return <p role="alert">{error}</p>;

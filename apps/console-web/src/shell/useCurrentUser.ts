@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiFetch } from '../api.js';
 
 export interface CurrentUser {
   sub: string;
@@ -10,7 +11,7 @@ export function useCurrentUser(): CurrentUser | null {
   const [user, setUser] = useState<CurrentUser | null>(null);
 
   useEffect(() => {
-    fetch('/api/me')
+    apiFetch('/api/me')
       .then((response) => {
         if (!response.ok) throw new Error(`GET /api/me failed: ${response.status}`);
         return response.json();
