@@ -11,3 +11,7 @@ Default five canonical role labels, unchanged: `needs-triage`, `needs-info`, `re
 ### Domain docs
 
 Single-context — one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Ticket format
+
+Two title shapes only — `NN — Title` for a plan/epic vertical slice, bare `Title` for a bug. No module-scope prefixes. See the `ticket-format` skill and `docs/agents/issue-tracker.md`.
