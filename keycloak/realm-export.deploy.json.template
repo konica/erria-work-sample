@@ -1,0 +1,58 @@
+{
+  "realm": "erria",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "editUsernameAllowed": false,
+  "resetPasswordAllowed": true,
+  "bruteForceProtected": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "reviewer",
+        "description": "Can review the queue, approve/reject/edit drafts, and resolve escalations."
+      },
+      {
+        "name": "admin",
+        "description": "Superset of reviewer, plus access to the Settings screen (#79).",
+        "composite": true,
+        "composites": {
+          "realm": ["reviewer"]
+        }
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "console-web",
+      "name": "Console (SPA)",
+      "description": "React console. Public client, Authorization Code + PKCE — no client secret, matching a browser's inability to keep one.",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["DEPLOY_ORIGIN_PLACEHOLDER/*"],
+      "webOrigins": ["DEPLOY_ORIGIN_PLACEHOLDER"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "console-api",
+      "name": "Console API (resource server)",
+      "description": "NestJS API. Bearer-only — it validates access tokens issued to console-web against this realm's JWKS (#77); it never initiates its own login flow.",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    }
+  ],
+  "users": []
+}

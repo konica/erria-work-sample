@@ -10,11 +10,15 @@ version: 2
 secret:
   ignored_paths:
     # Local-development placeholders, not credentials to anything that exists:
-    #   .env.example  — ships DATABASE_URL with the erria/erria dev user the README documents
-    #   compose.yaml  — defaults POSTGRES_PASSWORD to the same value so `pnpm compose:up`
-    #                   needs no extra env. The database is published to localhost only and
-    #                   is recreated from scratch by `pnpm compose:reset`.
+    #   .env.example         — ships DATABASE_URL with the erria/erria dev user the README documents
+    #   compose.yaml         — defaults POSTGRES_PASSWORD to the same value so `pnpm compose:up`
+    #                          needs no extra env. The database is published to localhost only and
+    #                          is recreated from scratch by `pnpm compose:reset`.
+    #   .env.deploy.example  — deployment-overlay template (issue #57); every value in it is a
+    #                          CHANGE_ME placeholder or a genuinely safe default, never a real
+    #                          credential (see the file's own header comment).
     #
     # Exact paths rather than globs, so a real secret committed anywhere else is still caught.
     - '.env.example'
     - 'compose.yaml'
+    - '.env.deploy.example'

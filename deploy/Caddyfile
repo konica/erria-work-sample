@@ -1,0 +1,25 @@
+# Caddy site config for the deployment overlay (issue #57, compose.deploy.yaml).
+#
+# One hostname, automatic HTTPS: Caddy requests and renews a Let's Encrypt certificate for
+# {$DEPLOY_DOMAIN} with no certificate config to write, using the ACME HTTP-01 challenge on
+# port 80 (also published, for exactly that) plus the redirect to 443, which Caddy adds itself.
+#
+# Deliberately does NOT block /auth/admin* or add security headers/rate limiting — that
+# hardening is issue #59 ("Keycloak hardening for public exposure"), layered on the routes this
+# file establishes rather than replacing them. Today, both routes below are open.
+
+{
+	email {$LETSENCRYPT_EMAIL}
+}
+
+{$DEPLOY_DOMAIN} {
+	# Keycloak, reachable under /auth/* because compose.deploy.yaml sets
+	# KC_HTTP_RELATIVE_PATH=/auth — one hostname/certificate instead of a second DNS record.
+	# No path stripping here (a plain `reverse_proxy <matcher> <upstream>`, not `handle_path`):
+	# Keycloak itself expects requests to arrive with the /auth prefix intact.
+	reverse_proxy /auth/* keycloak:8080
+
+	# Everything else: console-api, which also serves the built console-web SPA on this same
+	# origin (ADR-0007) — there is no separate console-web upstream to route to here.
+	reverse_proxy console-api:3000
+}
