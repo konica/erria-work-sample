@@ -1,7 +1,7 @@
 variable "location" {
-  description = "Azure region. West Europe by default for GDPR data residency (Erria is Danish, data includes EU business contacts)."
+  description = "Azure region. ADR-0007 specifies West Europe for GDPR data residency, but this subscription hit RegionIsOfferRestricted on nearly every VM SKU in every EU/APAC region checked, plus a 0 vCPU quota on the few SKUs that were offered (Bsv2, DASv5, DCasv6, ...) everywhere. Central US is the one region found where the D-series v6/v7 lineup is both unrestricted AND has real quota right now, with no quota-increase request or wait needed. A deliberate, PM-approved deviation from the EU-residency default for this MVP phase, not an oversight. Revisit once the subscription's region/SKU restrictions lift."
   type        = string
-  default     = "westeurope"
+  default     = "centralus"
 }
 
 variable "resource_group_name" {
@@ -11,9 +11,9 @@ variable "resource_group_name" {
 }
 
 variable "vm_size" {
-  description = "VM SKU. Standard_B2s per ADR-0007 / the MVP deployment design — do not resize casually, the memory budget in that doc assumes 4 GiB."
+  description = "VM SKU. ADR-0007 specifies Standard_B2s (2 vCPU/4 GiB, ~$35/mo), but it's RegionIsOfferRestricted subscription-wide on the current subscription in every region checked, and its Bsv2 cousin has 0 quota everywhere too. Standard_D2als_v6 (2 vCPU/4 GiB, AMD, ~$66/mo compute in Central US) is unrestricted with real quota in Central US specifically — it matches the doc's original 4 GiB memory budget exactly, and being a non-burstable D-series SKU, doesn't carry the B-series CPU-credit-throttling caveat the deployment design flagged for Keycloak startup / migrations. All-in cost is ~$75/mo vs. the ticket's ~$44/mo estimate, driven by the region/SKU swap, not by oversizing. Re-check availability with `az vm list-skus --location <location> --size Standard_B2s --all -o table` if this subscription's restrictions ever lift."
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_D2als_v6"
 }
 
 variable "os_disk_size_gb" {
@@ -29,7 +29,7 @@ variable "admin_username" {
 }
 
 variable "admin_ssh_public_key" {
-  description = "Public half of the deploy SSH key. Pass via TF_VAR_admin_ssh_public_key — never commit this in a .tfvars file."
+  description = "Public half of the deploy SSH key. Must be RSA — Azure's VM SSH-key provisioning rejects ed25519 keys outright ('Only RSA SSH keys are supported by Azure'), even though the VM's own OpenSSH server would accept either once running. Pass via TF_VAR_admin_ssh_public_key — never commit this in a .tfvars file."
   type        = string
   sensitive   = true
 }
@@ -77,15 +77,15 @@ variable "dns_record_name" {
 }
 
 variable "budget_amount_usd" {
-  description = "Monthly Azure Cost Management budget for this resource group. Default has headroom over the ~$44/month estimate; this alert covers Azure spend only, not the separate Anthropic/Claude API bill."
+  description = "Monthly Azure Cost Management budget for this resource group. Default has headroom over the ~$75/month Central US + Standard_D2als_v6 estimate (revised up from the ticket's original ~$44/month West Europe + Standard_B2s figure due to subscription SKU/region restrictions); this alert covers Azure spend only, not the separate Anthropic/Claude API bill."
   type        = number
-  default     = 60
+  default     = 95
 }
 
 variable "budget_alert_emails" {
-  description = "Email addresses notified at 50/80/100% of the budget — override this default before applying for real."
+  description = "Email addresses notified at 50/80/100% of the budget."
   type        = list(string)
-  default     = ["ops@erria.example"]
+  default     = ["dtrungthao@gmail.com"]
 }
 
 variable "tags" {

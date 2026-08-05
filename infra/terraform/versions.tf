@@ -21,4 +21,13 @@ terraform {
 
 provider "azurerm" {
   features {}
+
+  # The provider otherwise tries to auto-register ~40+ resource providers it
+  # supports on every run, including many this module never touches
+  # (ApiManagement, MachineLearningServices, ...). We register exactly what
+  # we need by hand (Storage, Compute, Network, Insights — see
+  # infra/terraform/README.md); this only opts out of the blanket attempt.
+  # (skip_provider_registration, not resource_provider_registrations, on
+  # provider versions pinned to the 3.x series — the latter is a v4-only argument.)
+  skip_provider_registration = true
 }

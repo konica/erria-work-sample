@@ -8,7 +8,12 @@
 set -euo pipefail
 
 RESOURCE_GROUP="erria-tfstate"
-LOCATION="westeurope"
+# centralindia, not westeurope: the current subscription's storage account
+# creation is blocked in West Europe ("region not accepting new customers"),
+# matching the same subscription-wide restriction that forced the VM SKU/
+# region choice in infra/terraform/variables.tf. Keep this in sync with that
+# file's `location` default.
+LOCATION="centralindia"
 STORAGE_ACCOUNT="erriatfstate" # must be globally unique; if taken, pick another
                                  # and pass -backend-config="storage_account_name=..."
                                  # to `terraform init`.

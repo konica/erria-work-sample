@@ -40,14 +40,19 @@ resource "azurerm_network_security_group" "review" {
   tags                = var.tags
 
   security_rule {
-    name                       = "AllowSSH"
-    priority                   = 100
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefixes    = var.ssh_source_address_prefixes
+    name                   = "AllowSSH"
+    priority               = 100
+    direction              = "Inbound"
+    access                 = "Allow"
+    protocol               = "Tcp"
+    source_port_range      = "*"
+    destination_port_range = "22"
+    # Azure rejects "*" (or other tag values) on the plural source_address_prefixes
+    # field — it's only valid on the singular source_address_prefix. Use the
+    # singular field for the default single-value case (typically "*") and only
+    # switch to the plural list once it's tightened to more than one real CIDR.
+    source_address_prefix      = length(var.ssh_source_address_prefixes) == 1 ? var.ssh_source_address_prefixes[0] : null
+    source_address_prefixes    = length(var.ssh_source_address_prefixes) == 1 ? null : var.ssh_source_address_prefixes
     destination_address_prefix = "*"
   }
 
