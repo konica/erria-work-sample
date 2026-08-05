@@ -87,24 +87,24 @@ export const api = {
       json<{ message: { id: string; status: string } }>,
     ),
 
-  getSettings: () => fetch('/api/settings').then(json<SettingsPayload>),
+  getSettings: () => apiFetch('/api/settings').then(json<SettingsPayload>),
 
   saveBasicSettings: (basic: SettingsPayload['basic']) =>
-    fetch('/api/settings/basic', {
+    apiFetch('/api/settings/basic', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(basic),
     }).then(json<SettingsPayload>),
 
   proposeAdvancedSettings: (advanced: SettingsPayload['advanced']) =>
-    fetch('/api/settings/advanced', {
+    apiFetch('/api/settings/advanced', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(advanced),
     }).then(json<AdvancedSettingsProposal>),
 
   confirmAdvancedSettings: (advanced: SettingsPayload['advanced']) =>
-    fetch('/api/settings/advanced/confirm', {
+    apiFetch('/api/settings/advanced/confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(advanced),
@@ -113,7 +113,7 @@ export const api = {
 
 export const tierHistoryApi = {
   list: (accountId: string) =>
-    fetch(`/api/accounts/${accountId}/tier-history`).then(json<{ items: TierHistoryItem[] }>),
+    apiFetch(`/api/accounts/${accountId}/tier-history`).then(json<{ items: TierHistoryItem[] }>),
 };
 
 export interface AuditSampleRow {
@@ -136,12 +136,12 @@ interface AuditSampleList {
 
 export const auditApi = {
   list: (status?: 'unreviewed' | 'fine' | 'concerning') =>
-    fetch(status ? `/api/audit-samples?status=${status}` : '/api/audit-samples').then(
+    apiFetch(status ? `/api/audit-samples?status=${status}` : '/api/audit-samples').then(
       json<AuditSampleList>,
     ),
 
   mark: (id: string, verdict: 'fine' | 'concerning') =>
-    fetch(`/api/audit-samples/${id}/mark`, {
+    apiFetch(`/api/audit-samples/${id}/mark`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ verdict }),
