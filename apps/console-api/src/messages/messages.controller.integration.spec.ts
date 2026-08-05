@@ -57,8 +57,13 @@ describe('MessagesController approve → dispatch', () => {
     }).compile();
     const controller = moduleRef.get(MessagesController);
 
-    const result = await controller.approve(account.id, message.id);
+    const result = await controller.approve(account.id, message.id, {
+      sub: 'minh.tran',
+      name: 'Minh Tran',
+      roles: ['reviewer'],
+    });
     expect(result.message.status).toBe('approved');
+    expect(result.message.decidedBy).toBe('Minh Tran');
 
     // The approve call itself must not have blocked on the send: it returns before dispatch
     // completes, so we assert the message is NOT yet sent immediately after the await resolves,
