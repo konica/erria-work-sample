@@ -5,6 +5,13 @@ import { AccountsService } from './accounts.service.js';
 export class AccountsController {
   constructor(private readonly accountsService: AccountsService) {}
 
+  // Declared before ':id' — Nest resolves routes in declaration order, so this must come first
+  // or '/tier-history' gets swallowed as an account id by the handler below.
+  @Get(':id/tier-history')
+  async tierHistory(@Param('id') id: string) {
+    return this.accountsService.tierHistory(id);
+  }
+
   @Get(':id')
   async detail(@Param('id') id: string) {
     const detail = await this.accountsService.getDetail(id);

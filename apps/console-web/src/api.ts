@@ -14,6 +14,16 @@ export interface AccountDetail {
   pendingMessage: { id: string; body: string; edited: boolean; tierContext: number } | null;
 }
 
+export interface TierHistoryItem {
+  id: string;
+  eventType: string;
+  fromTier: number | null;
+  toTier: number | null;
+  reason: string;
+  occurredAt: string;
+  isManual: boolean;
+}
+
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) throw new Error(`Request failed: ${response.status}`);
   return response.json() as Promise<T>;
@@ -38,4 +48,9 @@ export const api = {
     fetch(`/api/accounts/${accountId}/messages/${messageId}/reject`, { method: 'POST' }).then(
       json<{ message: { id: string; status: string } }>,
     ),
+};
+
+export const tierHistoryApi = {
+  list: (accountId: string) =>
+    fetch(`/api/accounts/${accountId}/tier-history`).then(json<{ items: TierHistoryItem[] }>),
 };
