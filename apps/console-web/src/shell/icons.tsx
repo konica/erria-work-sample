@@ -26,7 +26,9 @@ export type IconName =
   | 'checkc'
   | 'x'
   | 'xc'
-  | 'robot';
+  | 'robot'
+  | 'flag'
+  | 'chevron';
 
 const PATHS: Record<IconName, ReactNode> = {
   queue: (
@@ -126,6 +128,8 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M12 4v4M9 14h.01M15 14h.01M2 13v2M22 13v2" />
     </>
   ),
+  flag: <path d="M4 21V4h13l-2 4 2 4H4" />,
+  chevron: <path d="m6 9 6 6 6-6" />,
 };
 
 export function Icon({ name, ...svgProps }: { name: IconName } & SVGProps<SVGSVGElement>) {

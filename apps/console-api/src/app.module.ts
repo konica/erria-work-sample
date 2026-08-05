@@ -7,6 +7,7 @@ import { TriggersModule } from './triggers/triggers.module.js';
 import { NavCountsModule } from './nav-counts/nav-counts.module.js';
 import { MessagesModule } from './messages/messages.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { AuditModule } from './audit/audit.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AuthModule } from './auth/auth.module.js';
     TriggersModule,
     NavCountsModule,
     MessagesModule,
+    AuditModule,
   ],
   controllers: [HealthController],
 })
