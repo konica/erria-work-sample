@@ -4,17 +4,23 @@ import { Sidebar } from './Sidebar.js';
 import type { ScreenKey } from './screens.js';
 
 /*
- * No router yet — the only screen the app can show today is the queue, so the active nav
- * item and header crumb/title are fixed here rather than derived.
+ * No router yet — App.tsx tracks the active screen as local state and passes it down here,
+ * rather than deriving it from a URL.
  */
-const ACTIVE_SCREEN: ScreenKey = 'queue';
-
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  active,
+  onNavigate,
+  children,
+}: {
+  active: ScreenKey;
+  onNavigate?: (screen: ScreenKey) => void;
+  children: ReactNode;
+}) {
   return (
     <div className="app">
-      <Sidebar active={ACTIVE_SCREEN} />
+      <Sidebar active={active} onNavigate={onNavigate} />
       <main className="main">
-        <Header active={ACTIVE_SCREEN} />
+        <Header active={active} />
         <div className="scroll">{children}</div>
       </main>
     </div>

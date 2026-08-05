@@ -2,7 +2,13 @@ import { NavItem } from './NavItem.js';
 import { SCREENS, type ScreenKey } from './screens.js';
 import { useNavCounts } from './useNavCounts.js';
 
-export function Sidebar({ active }: { active: ScreenKey }) {
+export function Sidebar({
+  active,
+  onNavigate,
+}: {
+  active: ScreenKey;
+  onNavigate?: (screen: ScreenKey) => void;
+}) {
   const counts = useNavCounts();
 
   return (
@@ -18,7 +24,12 @@ export function Sidebar({ active }: { active: ScreenKey }) {
       </div>
 
       <div className="nav-label">Workspace</div>
-      <NavItem icon={SCREENS.queue.icon} label={SCREENS.queue.label} active={active === 'queue'} />
+      <NavItem
+        icon={SCREENS.queue.icon}
+        label={SCREENS.queue.label}
+        active={active === 'queue'}
+        onClick={onNavigate ? () => onNavigate('queue') : undefined}
+      />
       <NavItem
         icon={SCREENS.review.icon}
         label={SCREENS.review.label}
@@ -35,7 +46,12 @@ export function Sidebar({ active }: { active: ScreenKey }) {
       <NavItem icon={SCREENS.audit.icon} label={SCREENS.audit.label} active={active === 'audit'} />
 
       <div className="nav-label">Admin</div>
-      <NavItem icon={SCREENS.sendaudit.icon} label={SCREENS.sendaudit.label} active={active === 'sendaudit'} />
+      <NavItem
+        icon={SCREENS.sendaudit.icon}
+        label={SCREENS.sendaudit.label}
+        active={active === 'sendaudit'}
+        onClick={onNavigate ? () => onNavigate('sendaudit') : undefined}
+      />
 
       <div className="rail-foot">
         <NavItem icon={SCREENS.settings.icon} label={SCREENS.settings.label} active={active === 'settings'} />
