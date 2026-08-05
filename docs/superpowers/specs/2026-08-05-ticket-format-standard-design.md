@@ -51,22 +51,21 @@ blocking edges are untouched — title only.
 
 ## Enforcement
 
-`.claude/` and `.agents/` are both gitignored in this repo (Claude Code/agent skills are per-user
-local config here, not committed code), so a `SKILL.md` under either would never reach a teammate
-or a fresh clone — it'd be invisible to exactly the people this is meant to protect. The enforcement
-has to live in the files that are actually tracked and already read by every entry point:
+`.claude/` is now tracked in this repo (`.gitignore` narrowed to exclude only
+`.claude/settings.local.json`, `.claude/dispatch-logs`, and `.claude/worktrees` — the last one
+being per-session worktree checkouts, not repo content, so it must stay excluded even though the
+folder itself is shared). That makes a real project skill possible, so enforcement is two
+committed, mutually-reinforcing layers:
 
+- **`.claude/skills/ticket-format/SKILL.md`** — a project skill whose description matches on
+  creating or retitling a GitHub issue. Because `superpowers:using-superpowers` forces any matching
+  skill to be invoked regardless of entry point, this catches the case that broke down for #75–#79:
+  a title typed by hand outside `to-tickets`. States the two shapes and the "next `NN`" lookup.
 - **`docs/agents/issue-tracker.md`** — `to-tickets`, `/triage`, and `/wayfinder` already read this
-  doc for this repo's tracker setup, so its Conventions section gets a title-format rule: the two
-  shapes above, and the "next `NN`" lookup (`gh issue list --state all --json title --jq` a regex
-  for the leading `NN —`, take the max, +1).
-- **Root `CLAUDE.md`, "Agent skills"** — gets a fourth entry, `### Ticket format`, mirroring the
-  existing `issue-tracker.md` / `triage-labels.md` / `domain.md` entries, so it's visible to anyone
-  (human or agent) reading the repo's top-level instructions before touching the tracker — including
-  the case that broke down for #75–#79: a title typed by hand outside `to-tickets`.
-
-A local `.claude/skills/ticket-format/SKILL.md` is included too, for this machine's own session —
-harmless, but understood to be a convenience copy, not the shared mechanism.
+  doc for this repo's tracker setup, so its Conventions section carries the same rule as a
+  backstop for any flow that reads tracker config but not the skill list.
+- **Root `CLAUDE.md`, "Agent skills"** — a fourth entry, `### Ticket format`, mirroring the existing
+  `issue-tracker.md` / `triage-labels.md` / `domain.md` entries, pointing at both of the above.
 
 ## Out of scope
 
