@@ -14,6 +14,16 @@ export interface AccountDetail {
   pendingMessage: { id: string; body: string; edited: boolean; tierContext: number } | null;
 }
 
+export interface TierHistoryItem {
+  id: string;
+  eventType: string;
+  fromTier: number | null;
+  toTier: number | null;
+  reason: string;
+  occurredAt: string;
+  isManual: boolean;
+}
+
 export interface SettingsPayload {
   basic: { tier1PromotionThreshold: number; tier1AuditSampleRate: number };
   advanced: {
@@ -81,6 +91,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(advanced),
     }).then(json<SettingsPayload>),
+};
+
+export const tierHistoryApi = {
+  list: (accountId: string) =>
+    fetch(`/api/accounts/${accountId}/tier-history`).then(json<{ items: TierHistoryItem[] }>),
 };
 
 export interface AuditSampleRow {

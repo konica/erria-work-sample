@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from './shell/icons.js';
 import { api, type AccountDetail } from './api.js';
+import { TierHistorySection } from './TierHistorySection.js';
 
 type Decision = 'approved' | 'rejected' | null;
 
@@ -216,6 +217,8 @@ export function AccountDetailPage({ accountId, onBack }: { accountId: string; on
               </>
             )}
           </div>
+
+          <TierHistorySection accountId={account.id} />
         </div>
 
         <aside className="detail-rail">
