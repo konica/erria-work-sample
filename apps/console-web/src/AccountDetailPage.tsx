@@ -1,34 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Icon } from './shell/icons.js';
-import { api, type AccountDetail } from './api.js';
+import { api, escalationApi, type AccountDetail, type EscalationSummary } from './api.js';
 import { TierHistorySection } from './TierHistorySection.js';
+import { TierBadge } from './TierBadge.js';
+import { EscalationPanel } from './EscalationPanel.js';
+import { ChangeTierPanel } from './ChangeTierPanel.js';
 
 type Decision = 'approved' | 'rejected' | null;
-
-function TierBadge({ tier }: { tier: number }) {
-  if (tier === 1) {
-    return (
-      <span className="badge t1">
-        <Icon name="robot" />
-        Tier 1 · Autonomous
-      </span>
-    );
-  }
-  if (tier === 3) {
-    return (
-      <span className="badge t3">
-        <Icon name="escalation" />
-        Tier 3 · Escalated
-      </span>
-    );
-  }
-  return (
-    <span className="badge t2">
-      <Icon name="pencil" />
-      Tier 2 · Needs approval
-    </span>
-  );
-}
 
 export function AccountDetailPage({ accountId, onBack }: { accountId: string; onBack: () => void }) {
   const [detail, setDetail] = useState<AccountDetail | null>(null);
@@ -36,12 +14,19 @@ export function AccountDetailPage({ accountId, onBack }: { accountId: string; on
   const [editing, setEditing] = useState(false);
   const [draftBody, setDraftBody] = useState('');
   const [edited, setEdited] = useState(false);
+  const [escalation, setEscalation] = useState<EscalationSummary | null>(null);
+  const [tierPanelOpen, setTierPanelOpen] = useState(false);
 
   useEffect(() => {
     api.getAccount(accountId).then((data) => {
       setDetail(data);
       setDraftBody(data.pendingMessage?.body ?? '');
       setEdited(data.pendingMessage?.edited ?? false);
+    });
+    // No accountId filter on GET /api/escalations — this account's active escalation, if any, is
+    // found by matching the small active-escalation list rather than a dedicated endpoint.
+    escalationApi.list('active').then((data) => {
+      setEscalation(data.items.find((item) => item.accountId === accountId) ?? null);
     });
   }, [accountId]);
 
@@ -96,18 +81,40 @@ export function AccountDetailPage({ accountId, onBack }: { accountId: string; on
         </div>
         <div className="detail-tier">
           <TierBadge tier={account.currentTier} />
+          <button
+            className="tier-change-link"
+            onClick={() => setTierPanelOpen(true)}
+            data-od-id="change-tier-link"
+          >
+            <Icon name="pencil" />
+            Change tier
+          </button>
         </div>
       </div>
+
+      {tierPanelOpen && (
+        <ChangeTierPanel
+          accountId={account.id}
+          currentTier={account.currentTier}
+          onChanged={(tier) => {
+            setDetail({ ...detail, account: { ...detail.account, currentTier: tier } });
+            setTierPanelOpen(false);
+          }}
+          onCancel={() => setTierPanelOpen(false)}
+        />
+      )}
 
       <div className="detail-grid">
         <div className="detail-col">
           <div className="detail-section">
             <div className="sh">
-              <Icon name="review" />
-              <span className="st">Draft awaiting approval</span>
+              <Icon name={escalation ? 'escalation' : 'review'} />
+              <span className="st">{escalation ? 'Active escalation' : 'Draft awaiting approval'}</span>
             </div>
 
-            {!pendingMessage ? (
+            {escalation ? (
+              <EscalationPanel escalation={escalation} onResolved={() => {}} />
+            ) : !pendingMessage ? (
               <div className="empty">
                 <Icon name="review" />
                 <div>
