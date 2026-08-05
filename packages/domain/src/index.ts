@@ -32,3 +32,14 @@ export type {
   HardTriggerRuleName,
   DecisionSettings,
 } from './classification/decide-hard-trigger.js';
+export { openEscalation } from './escalation/open-escalation.js';
+export type { OpenEscalationInput } from './escalation/open-escalation.js';
+export {
+  generateRecommendedNextStep,
+  HANDOFF_MODEL_ID,
+} from './escalation/generate-next-step.js';
+export type {
+  GenerateNextStepInput,
+  GenerateNextStepResult,
+} from './escalation/generate-next-step.js';
+export { HANDOFF_SYSTEM_PROMPT, FALLBACK_NEXT_STEP_BY_RULE } from './escalation/handoff-system-prompt.js';

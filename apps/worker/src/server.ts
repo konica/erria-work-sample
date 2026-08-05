@@ -4,6 +4,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { DispatchMode } from '@erria/domain';
 import { registerProcessTriggerRoute } from './routes/process-trigger.js';
 import { registerDispatchMessageRoute } from './routes/dispatch-message.js';
+import { registerClassifyInboundRoute } from './routes/classify-inbound.js';
 
 export interface ServerDeps {
   prisma: PrismaClient;
@@ -23,6 +24,7 @@ export function buildServer(deps?: ServerDeps): FastifyInstance {
   if (deps) {
     registerProcessTriggerRoute(app, deps);
     registerDispatchMessageRoute(app, { prisma: deps.prisma, dispatchMode: deps.dispatchMode ?? 'sandbox' });
+    registerClassifyInboundRoute(app, deps);
   }
   return app;
 }
