@@ -77,6 +77,17 @@ workflow as the SSH target (a GitHub Actions repo variable, updated by hand when
 changes — deliberately not Key Vault; see the MVP deployment design's §7, which rejects
 Key Vault at this stage as a moving part with no root secret it removes).
 
+For this MVP review, that DNS pointer is `erria-outreach.duckdns.org` (DuckDNS, free) —
+not Erria's real domain (`erria.dk`, DanDomain-hosted, deliberately unused here) and not
+`*.cloudapp.azure.com` (ruled out on ticket #56 — its Let's Encrypt issuance shares
+`azure.com`'s rate limit across every Azure tenant) or an `nip.io`-style IP-encoded
+hostname (breaks on every VM recreate, unlike a real subdomain). See #56/#57 for the full
+reasoning. If the IP ever changes, re-point it with:
+```
+curl "https://www.duckdns.org/update?domains=erria-outreach&token=<token>&ip=<new-ip>"
+```
+(token lives in the `.env` file on the VM / the team's password manager, never committed).
+
 ## Tearing down
 
 ```

@@ -8,12 +8,16 @@ vm_size              = "Standard_D2als_v6" # Standard_B2s/B2s_v2 are blocked on 
 
 backup_storage_account_name = "erriareviewbackups" # must be globally unique
 
-# DNS: leave manage_dns_in_azure = false if Erria's domain is not delegated
-# to Azure DNS. Otherwise set these three and point dns_record_name +
-# dns_zone_name at the subdomain (e.g. "outreach" + "erria.com" for
-# outreach.erria.com). Never cloudapp.azure.com — see infra/terraform/dns.tf.
+# DNS: manage_dns_in_azure stays false for this MVP review. Erria's real domain
+# (erria.dk, DanDomain-hosted) is deliberately not used here — no cost, no
+# coordination with whoever manages that account. Instead the review URL is
+# erria-outreach.duckdns.org (DuckDNS, free, decoupled from this VM's IP so it
+# survives a recreate — see #56/#57 for the full reasoning against
+# cloudapp.azure.com and nip.io-style alternatives). The A record is managed
+# by hand in DuckDNS's own console, not by this module — set these three only
+# if Erria's domain (or any zone) ever gets delegated to Azure DNS instead.
 manage_dns_in_azure          = false
-# dns_zone_name              = "erria.com"
+# dns_zone_name              = "erria.dk"
 # dns_zone_resource_group_name = "erria-dns"
 # dns_record_name            = "outreach"
 
