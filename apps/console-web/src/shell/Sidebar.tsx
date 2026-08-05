@@ -1,6 +1,7 @@
 import { NavItem } from './NavItem.js';
 import { SCREENS, type ScreenKey } from './screens.js';
 import { useNavCounts } from './useNavCounts.js';
+import { useCurrentUser } from './useCurrentUser.js';
 
 export function Sidebar({
   active,
@@ -10,6 +11,8 @@ export function Sidebar({
   onNavigate?: (screen: ScreenKey) => void;
 }) {
   const counts = useNavCounts();
+  const currentUser = useCurrentUser();
+  const isAdmin = currentUser?.roles?.includes('admin') ?? false;
 
   return (
     <aside className="rail">
@@ -54,12 +57,14 @@ export function Sidebar({
       />
 
       <div className="rail-foot">
-        <NavItem
-          icon={SCREENS.settings.icon}
-          label={SCREENS.settings.label}
-          active={active === 'settings'}
-          onClick={onNavigate ? () => onNavigate('settings') : undefined}
-        />
+        {isAdmin && (
+          <NavItem
+            icon={SCREENS.settings.icon}
+            label={SCREENS.settings.label}
+            active={active === 'settings'}
+            onClick={onNavigate ? () => onNavigate('settings') : undefined}
+          />
+        )}
         <div className="rail-user">
           <div className="avatar">MT</div>
           <div>

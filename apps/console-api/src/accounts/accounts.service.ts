@@ -44,6 +44,27 @@ export class AccountsService {
     };
   }
 
+  async tierHistory(accountId: string) {
+    const events = await this.prisma.tierHistoryEvent.findMany({
+      where: { accountId },
+      orderBy: { occurredAt: 'desc' },
+    });
+
+    return {
+      items: events.map((event) => ({
+        id: event.id,
+        eventType: event.eventType,
+        fromTier: event.fromTier,
+        toTier: event.toTier,
+        reason: event.reason,
+        occurredAt: event.occurredAt.toISOString(),
+        // The console tags human overrides distinctly so a reviewer scanning the timeline can
+        // tell system-driven from human-driven entries at a glance.
+        isManual: event.eventType === 'manual_override',
+      })),
+    };
+  }
+
   /**
    * ADR-0004: Tier 1 is earned via Clean Approvals, never granted by hand — the caller (and the
    * DTO's @IsIn) must never pass 1, but the check stays here too since this is the invariant that
