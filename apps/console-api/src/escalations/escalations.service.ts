@@ -111,6 +111,71 @@ export class EscalationsService {
       escalation: { id: updated.id, status: updated.status },
     };
   }
+
+  /**
+   * Spec §9: human-set only. No matching heuristic, no Claude call — reliably matching issues is
+   * a judgment call, not a deterministic match.
+   */
+  async link(accountId: string, escalationId: string, resolutionId: string) {
+    const escalation = await this.prisma.escalation.findFirst({
+      where: { id: escalationId, accountId },
+    });
+    if (!escalation) {
+      throw new NotFoundException(`Escalation ${escalationId} not found on account ${accountId}`);
+    }
+
+    const resolution = await this.prisma.resolution.findUnique({ where: { id: resolutionId } });
+    if (!resolution) {
+      throw new NotFoundException(`Resolution ${resolutionId} not found`);
+    }
+    if (resolution.accountId !== accountId) {
+      throw new BadRequestException(
+        `Resolution ${resolutionId} belongs to a different account — a repeat escalation can only reference this account's own history`,
+      );
+    }
+
+    const updated = await this.prisma.escalation.update({
+      where: { id: escalationId },
+      data: { repeatOfResolutionId: resolutionId },
+    });
+
+    return { escalation: { id: updated.id, repeatOfResolutionId: updated.repeatOfResolutionId } };
+  }
+
+  async unlink(accountId: string, escalationId: string) {
+    const escalation = await this.prisma.escalation.findFirst({
+      where: { id: escalationId, accountId },
+    });
+    if (!escalation) {
+      throw new NotFoundException(`Escalation ${escalationId} not found on account ${accountId}`);
+    }
+
+    const updated = await this.prisma.escalation.update({
+      where: { id: escalationId },
+      data: { repeatOfResolutionId: null },
+    });
+
+    return { escalation: { id: updated.id, repeatOfResolutionId: updated.repeatOfResolutionId } };
+  }
+
+  /** Prior resolutions on this account — the candidate list the human picks from. */
+  async priorResolutions(accountId: string) {
+    const resolutions = await this.prisma.resolution.findMany({
+      where: { accountId },
+      orderBy: { createdAt: 'desc' },
+      include: { escalation: true },
+    });
+
+    return {
+      items: resolutions.map((resolution) => ({
+        id: resolution.id,
+        actionTaken: resolution.actionTaken,
+        outcomeTag: resolution.outcomeTag,
+        rule: resolution.escalation.hardTriggerRule,
+        resolvedAt: resolution.createdAt.toISOString(),
+      })),
+    };
+  }
 }
 
 /** Informational only — spec §9 notes no response SLA is currently policy-set. */
