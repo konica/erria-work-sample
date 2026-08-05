@@ -166,10 +166,13 @@ migration step reads it) and running either app.
 | `WORKER_PORT` | `worker` | Defaults to `3100` |
 | `WORKER_INTERNAL_URL` | `console-api` | Base URL `WorkerClient` calls to reach `worker`'s `POST /internal/process-trigger/:id`. Defaults to `http://localhost:3100` if unset |
 | `CONSOLE_WEB_ORIGIN` | `console-api` (CORS) | Unset means CORS is closed by default, not open |
+| `KEYCLOAK_PORT` | `compose.yaml` | Defaults to `8080`. Set if something already owns that port |
+| `KEYCLOAK_ADMIN_USER` / `KEYCLOAK_ADMIN_PASSWORD` | `compose.yaml` | Bootstrap credentials for the Keycloak admin console, not an application login. Defaults (`admin`/`admin`) are throwaway dev values, not secrets |
+| `KEYCLOAK_SEED_PASSWORD` | `compose.yaml` (`keycloak/dev-entrypoint.sh`) | Password set on the seeded `console-web` login users after the realm imports — see [`keycloak/README.md`](keycloak/README.md) |
 
 ## Local dependencies
 
-`compose.yaml` holds the runtime dependencies the apps need locally — today just PostgreSQL.
+`compose.yaml` holds the runtime dependencies the apps need locally — PostgreSQL and Keycloak.
 One command starts them and applies the schema:
 
 ```bash
@@ -178,7 +181,7 @@ pnpm compose:down    # stop the stack, keep the data
 pnpm compose:reset   # wipe the volume and come back up migrated
 ```
 
-`compose:up` applies migrations as well as starting the container, which its name doesn't
+`compose:up` applies migrations as well as starting the containers, which its name doesn't
 advertise — it is deliberate, so that bringing the stack up leaves you with a database you can
 actually query. It needs `.env` to exist first, because the migration reads `DATABASE_URL`
 through `packages/db/prisma.config.ts`.
@@ -189,6 +192,15 @@ that file automatically — and update `DATABASE_URL` to match.
 
 `pnpm test` does not use this stack: `packages/db`'s integration test starts its own disposable
 `postgres:17` through Testcontainers, so tests pass whether or not the compose stack is running.
+
+### Keycloak
+
+`compose:up` also starts Keycloak (`http://localhost:8080`) and imports the realm committed at
+[`keycloak/realm-export.json`](keycloak/realm-export.json) — the `console-web`/`console-api`
+clients, the `reviewer`/`admin` realm roles, and two seeded users. See
+[`keycloak/README.md`](keycloak/README.md) for the seeded logins and how to fetch and decode a
+token by hand. Login/session wiring into the apps themselves is a later ticket (#77); today this
+only provisions the realm.
 
 ## Running the apps
 
