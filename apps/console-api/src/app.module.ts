@@ -8,6 +8,7 @@ import { NavCountsModule } from './nav-counts/nav-counts.module.js';
 import { MessagesModule } from './messages/messages.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { AuditModule } from './audit/audit.module.js';
+import { InboundModule } from './inbound/inbound.module.js';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { AuditModule } from './audit/audit.module.js';
     NavCountsModule,
     MessagesModule,
     AuditModule,
+    InboundModule,
   ],
   controllers: [HealthController],
 })
