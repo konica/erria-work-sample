@@ -9,6 +9,8 @@ import { MessagesModule } from './messages/messages.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { InboundModule } from './inbound/inbound.module.js';
+import { EscalationsModule } from './escalations/escalations.module.js';
+import { SettingsModule } from './settings/settings.module.js';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { InboundModule } from './inbound/inbound.module.js';
     MessagesModule,
     AuditModule,
     InboundModule,
+    EscalationsModule,
+    SettingsModule,
   ],
   controllers: [HealthController],
 })

@@ -81,9 +81,15 @@ export async function dispatchMessage(
   // calls nothing external, while performing the exact same persistence a real send would.
   console.log(`[dispatch:sandbox] to=${recipient} subject=${JSON.stringify(subject)}`);
 
+  // Only an agent draft's role changes on send — a human-authored reply is already correctly
+  // labeled and must stay that way, or its permanent record misattributes who wrote it.
   const sent = await deps.prisma.message.update({
     where: { id: message.id },
-    data: { role: 'agent_sent', status: 'sent', sentAt: new Date() },
+    data: {
+      role: message.role === 'agent_draft' ? 'agent_sent' : message.role,
+      status: 'sent',
+      sentAt: new Date(),
+    },
   });
 
   const cleanApprovalCounted = await recordCleanApproval(deps.prisma, message.id);
