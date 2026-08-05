@@ -170,4 +170,75 @@ describe('EscalationsService', () => {
       ),
     ).rejects.toThrow(/follow-?up body/i);
   });
+
+  it('links a new escalation to a prior resolution on the same account, and unlinks it again', async () => {
+    const { account, escalation } = await seedActiveEscalation();
+    const service = new EscalationsService(testDb.prisma, { dispatchMessage: async () => {} } as never);
+    await service.resolve(
+      account.id,
+      escalation.id,
+      { actionType: 'mark_resolved', actionTaken: 'Handled', outcomeTag: 'closed_no_action' },
+      'Minh Tran',
+    );
+    const prior = await testDb.prisma.resolution.findFirstOrThrow({
+      where: { escalationId: escalation.id },
+    });
+
+    const second = await testDb.prisma.escalation.create({
+      data: {
+        accountId: account.id,
+        hardTriggerRule: 'pricing_question',
+        reasonSummary: 'Same dispute resurfaced',
+        detail: 'test',
+        recommendedNextStep: 'Check the earlier handoff.',
+        status: 'active',
+      },
+    });
+
+    const linked = await service.link(account.id, second.id, prior.id);
+    expect(linked.escalation.repeatOfResolutionId).toBe(prior.id);
+
+    const unlinked = await service.unlink(account.id, second.id);
+    expect(unlinked.escalation.repeatOfResolutionId).toBeNull();
+  });
+
+  it('refuses to link a resolution belonging to a different account', async () => {
+    const first = await seedActiveEscalation();
+    const service = new EscalationsService(testDb.prisma, { dispatchMessage: async () => {} } as never);
+    await service.resolve(
+      first.account.id,
+      first.escalation.id,
+      { actionType: 'mark_resolved', actionTaken: 'Handled', outcomeTag: 'closed_no_action' },
+      'Minh Tran',
+    );
+    const prior = await testDb.prisma.resolution.findFirstOrThrow({
+      where: { escalationId: first.escalation.id },
+    });
+
+    const other = await seedActiveEscalation();
+
+    await expect(service.link(other.account.id, other.escalation.id, prior.id)).rejects.toThrow(
+      /different account/i,
+    );
+  });
+
+  it('lists prior resolutions on an account as link candidates', async () => {
+    const { account, escalation } = await seedActiveEscalation();
+    const service = new EscalationsService(testDb.prisma, { dispatchMessage: async () => {} } as never);
+    await service.resolve(
+      account.id,
+      escalation.id,
+      { actionType: 'mark_resolved', actionTaken: 'Handled by phone', outcomeTag: 'closed_no_action' },
+      'Minh Tran',
+    );
+
+    const result = await service.priorResolutions(account.id);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      actionTaken: 'Handled by phone',
+      outcomeTag: 'closed_no_action',
+      rule: 'pricing_question',
+    });
+  });
 });

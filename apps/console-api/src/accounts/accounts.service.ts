@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { PrismaClient } from '@erria/db';
 import { PRISMA } from '../prisma/prisma.module.js';
 
@@ -63,5 +63,62 @@ export class AccountsService {
         isManual: event.eventType === 'manual_override',
       })),
     };
+  }
+
+  /**
+   * ADR-0004: Tier 1 is earned via Clean Approvals, never granted by hand — the caller (and the
+   * DTO's @IsIn) must never pass 1, but the check stays here too since this is the invariant that
+   * actually matters.
+   */
+  async changeTier(accountId: string, tier: number, reason: string) {
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) {
+      throw new BadRequestException('A reason is required — it is saved to Tier History');
+    }
+    if (tier === 1) {
+      throw new BadRequestException(
+        'Tier 1 is earned through clean approvals and cannot be set manually',
+      );
+    }
+
+    const account = await this.prisma.account.findUnique({ where: { id: accountId } });
+    if (!account) {
+      throw new NotFoundException(`Account ${accountId} not found`);
+    }
+    if (account.currentTier === tier) {
+      throw new ConflictException(`Account ${accountId} is already Tier ${tier}`);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.account.update({
+        where: { id: accountId },
+        data: {
+          currentTier: tier,
+          tierRationale: `Manually set to Tier ${tier} — ${trimmedReason}`,
+        },
+      });
+
+      const event = await tx.tierHistoryEvent.create({
+        data: {
+          accountId,
+          eventType: 'manual_override',
+          fromTier: account.currentTier,
+          toTier: tier,
+          reason: `Tier ${account.currentTier} → Tier ${tier}. "${trimmedReason}" — manual override.`,
+        },
+      });
+
+      return {
+        account: { id: updated.id, currentTier: updated.currentTier },
+        tierHistoryEvent: {
+          id: event.id,
+          eventType: event.eventType,
+          fromTier: event.fromTier,
+          toTier: event.toTier,
+          reason: event.reason,
+          occurredAt: event.occurredAt.toISOString(),
+        },
+      };
+    });
   }
 }
