@@ -34,5 +34,37 @@ services:
       retries: 30
       start_period: 5s
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    # start-dev, not start: no HTTPS/hostname config needed for a box only ever reached at
+    # localhost. dev-entrypoint.sh runs start-dev --import-realm (loading realm-export.json,
+    # #75) and then sets the seeded users' passwords from KEYCLOAK_SEED_PASSWORD via kcadm —
+    # realm-export.json itself carries no credential, only role/client/user *definitions*.
+    entrypoint: ['bash', '/opt/keycloak/dev-entrypoint.sh']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KEYCLOAK_SEED_PASSWORD: ${KEYCLOAK_SEED_PASSWORD:-erria-dev}
+      KC_HEALTH_ENABLED: 'true'
+    ports:
+      - '${KEYCLOAK_PORT:-8080}:8080'
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ./keycloak/dev-entrypoint.sh:/opt/keycloak/dev-entrypoint.sh:ro
+    healthcheck:
+      # The Keycloak image ships bash but no curl/wget, so the health check speaks HTTP over
+      # bash's /dev/tcp against the management port (9000, separate from the app port since
+      # Keycloak 26) rather than shelling out to a tool that isn't there.
+      test:
+        - CMD-SHELL
+        - |
+          exec 3<>/dev/tcp/127.0.0.1/9000
+          printf 'GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3
+          grep -q '"status": "UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
 volumes:
   erria-pgdata:
