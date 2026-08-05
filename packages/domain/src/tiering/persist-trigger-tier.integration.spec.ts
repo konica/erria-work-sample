@@ -93,6 +93,27 @@ describe('recordIncomingTrigger', () => {
     expect(result.tierRationale).not.toBe('');
   });
 
+  it('persists whether the incoming trigger cites a compliance deadline', async () => {
+    const account = await createAccount();
+
+    const result = await recordIncomingTrigger(testDb.prisma, {
+      accountId: account.id,
+      vesselId: null,
+      category: 'compliance deadline',
+      description: 'test',
+      source: 'class_records',
+      confidenceLabel: 'mid',
+      verifiabilityNote: 'test',
+      detectedAt: new Date(),
+      hasComplianceDeadlineContent: true,
+    });
+
+    const trigger = await testDb.prisma.trigger.findUniqueOrThrow({
+      where: { id: result.triggerId },
+    });
+    expect(trigger.hasComplianceDeadlineContent).toBe(true);
+  });
+
   it('caps a Tier-1-earned account to a message-level Tier 2 without changing Account.currentTier', async () => {
     const account = await createAccount({ currentTier: 1 });
 

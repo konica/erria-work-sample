@@ -32,6 +32,7 @@ enum TriggerStatus {
   drafted
   superseded
   needs_triage
+  sequence_ended
 }
 
 enum MessageRole {
@@ -120,20 +121,21 @@ enum LlmCallOutcome {
 }
 
 model Account {
-  id                  String   @id @default(uuid())
-  externalRef         String?  @unique
-  companyName         String
-  segment             String
-  hub                 String
-  icpScore            Int
-  icpBand             IcpBand
-  relationshipSummary String
-  currentTier         Int
-  tierRationale       String
-  cleanApprovalsCount Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  lastActivityAt      DateTime @default(now())
+  id                           String    @id @default(uuid())
+  externalRef                  String?   @unique
+  companyName                  String
+  segment                      String
+  hub                          String
+  icpScore                     Int
+  icpBand                      IcpBand
+  relationshipSummary          String
+  currentTier                  Int
+  tierRationale                String
+  cleanApprovalsCount          Int       @default(0)
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+  lastActivityAt               DateTime  @default(now())
+  relationshipSummaryUpdatedAt DateTime?
 
   vessels           Vessel[]
   contacts          Contact[]
@@ -155,6 +157,8 @@ model Vessel {
   name      String
   imo       String    @unique
   flag      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   triggers  Trigger[]
 
   @@index([accountId])
@@ -174,18 +178,19 @@ model Contact {
 }
 
 model Trigger {
-  id                String          @id @default(uuid())
-  accountId         String
-  account           Account         @relation(fields: [accountId], references: [id])
-  vesselId          String?
-  vessel            Vessel?         @relation(fields: [vesselId], references: [id])
-  category          String
-  description       String
-  source            TriggerSource
-  confidenceLabel   ConfidenceLabel
-  verifiabilityNote String
-  detectedAt        DateTime
-  status            TriggerStatus   @default(new)
+  id                           String          @id @default(uuid())
+  accountId                    String
+  account                      Account         @relation(fields: [accountId], references: [id])
+  vesselId                     String?
+  vessel                       Vessel?         @relation(fields: [vesselId], references: [id])
+  category                     String
+  description                  String
+  source                       TriggerSource
+  confidenceLabel              ConfidenceLabel
+  verifiabilityNote            String
+  detectedAt                   DateTime
+  status                       TriggerStatus   @default(new)
+  hasComplianceDeadlineContent Boolean         @default(false)
 
   messages Message[]
 
@@ -320,6 +325,8 @@ model Setting {
   maxFollowups             Int            @default(2)
   minDaysBetweenFollowups  Int            @default(5)
   sentimentConfidenceFloor SentimentFloor @default(Medium)
+  autonomousSendingEnabled Boolean        @default(false)
+  autonomousPauseReason    String?
   updatedAt                DateTime       @updatedAt
 
   @@map("settings")
