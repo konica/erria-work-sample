@@ -20,7 +20,9 @@
     "build": "prisma generate && tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed": "tsx src/seed/seed.ts",
+    "import:triggers": "tsx src/seed/import-triggers.ts"
   },
   "dependencies": {
     "@prisma/client": "^7.0.0",
@@ -34,6 +36,7 @@
     "@testcontainers/postgresql": "^11.0.0",
     "vitest": "^3.0.0",
     "typescript": "^5.7.0",
-    "dotenv": "^16.4.0"
+    "dotenv": "^16.4.0",
+    "tsx": "^4.19.0"
   }
 }
