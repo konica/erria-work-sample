@@ -12,3 +12,6 @@ dist/
 packages/*/src/generated/
 .env
 .pnpm-store
+# Rendered from keycloak/realm-export.deploy.json.template at deploy time (issue #57) — the
+# committed template has no hostname; the rendered file has the real deploy domain baked in.
+/keycloak/realm-export.deploy.json

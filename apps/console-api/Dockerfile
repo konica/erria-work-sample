@@ -39,6 +39,18 @@ RUN pnpm --filter @erria/domain run build
 RUN pnpm --filter console-api run build
 RUN pnpm --filter console-web run build
 
+# ---- migrate: one-off `prisma migrate deploy` against a deployed database (issue #57) ----
+# Never the default build target (docker build with no --target still produces `runtime`,
+# below, since Docker picks the last FROM in the file) and never published to GHCR — the
+# `prod-deps`/`runtime` stages exclude the Prisma CLI from the shipped image on purpose (see
+# their comment below), so this reuses `build`'s full node_modules instead of adding a third
+# published image just to run a migration. Built and run locally on the VM at deploy time; see
+# deploy/README.md.
+FROM build AS migrate
+WORKDIR /app/packages/db
+ENTRYPOINT ["pnpm", "exec", "prisma"]
+CMD ["migrate", "deploy"]
+
 # ---- prod-deps: production-only deps for console-api and its workspace dependencies ----
 # --no-optional matters as much as --prod here: @prisma/client declares `prisma` and
 # `typescript` as *optional* peers, and pnpm resolves those regardless of --prod since

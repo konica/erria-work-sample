@@ -1,0 +1,201 @@
+# Deployment overlay (ADR-0007, docs/superpowers/specs/2026-08-04-mvp-deployment-design.md,
+# issue #57). Applied on top of the base file, never in place of it:
+#
+#   docker compose -f compose.yaml -f compose.deploy.yaml up -d
+#
+# compose.yaml stays exactly as it is ("not a deployment artifact") — this file inherits its
+# `postgres` service (image, `erria-pgdata` volume, `pg_isready` healthcheck) and layers
+# deployment-only concerns on top, rather than restating them somewhere they can drift.
+#
+# Every service other than `caddy` binds only to the compose network. Nothing here publishes
+# a host port pair except `caddy`'s 80/443 — Postgres in particular loses its published port
+# below, which is the single most consequential line in this file. That must be verified with
+# a port scan from off the box, not by reading this file back (see deploy/README.md).
+name: erria
+
+services:
+  postgres:
+    # !override, not a plain `[]` — Compose concatenates list-valued fields across files by
+    # default, so an empty list here would leave the base file's `5432:5432` mapping in place.
+    # Verified empirically against this Compose version; see deploy/README.md.
+    ports: !override []
+    restart: unless-stopped
+    # Budget: ~400 MB (issue #57). shared_buffers already defaults to 128 MB in the postgres:17
+    # image; named explicitly so the budget's reasoning is visible in the file that sets it,
+    # not left to an implicit default someone has to go look up.
+    command: ['postgres', '-c', 'shared_buffers=128MB']
+    mem_limit: 512m
+    environment:
+      # Only additive here — POSTGRES_USER/PASSWORD/DB keep coming from compose.yaml's own
+      # defaults, overridable the same way (see .env.deploy.example). This is the password for
+      # a second role this file's init script creates, for Keycloak's own database on this same
+      # server (issue #57: "a separate database on the same server, not a separate server").
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      # Runs once, only against a freshly-initialized erria-pgdata volume (Postgres's
+      # docker-entrypoint-initdb.d convention). If Postgres was already initialized before this
+      # overlay was first applied, run deploy/postgres-init/001-create-keycloak-db.sh by hand
+      # once instead — see deploy/README.md.
+      - ./deploy/postgres-init/001-create-keycloak-db.sh:/docker-entrypoint-initdb.d/001-create-keycloak-db.sh:ro
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    # start, not start-dev (production mode requires KC_HOSTNAME and a real proxy in front of
+    # it — both set below) — --import-realm loads keycloak/realm-export.deploy.json on every
+    # boot. Unlike the dev fixture (#75), this one seeds no users: per issue #59, reviewer/admin
+    # accounts are created by hand through the admin console (over an SSH tunnel — the admin
+    # path is never reachable from the internet) once the realm exists, not fixture-seeded with
+    # a known password.
+    command: start --import-realm
+    restart: unless-stopped
+    # Budget: ~800 MB (issue #57) — JVM heap capped at 512m below, plus JVM/Quarkus overhead on
+    # top of the heap. 1024m gives that overhead room without letting one leak threaten the box.
+    mem_limit: 1024m
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      # Reachable at /auth/* behind Caddy (see deploy/Caddyfile) rather than a second hostname —
+      # one DNS record, one certificate. KC_PROXY_HEADERS trusts the X-Forwarded-* headers Caddy
+      # sets so Keycloak knows the original request was HTTPS.
+      KC_HOSTNAME: ${DEPLOY_DOMAIN}
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: 'true'
+      # `start` (production mode, as opposed to dev's `start-dev`) refuses to boot without
+      # either TLS key material or an explicit acknowledgement that HTTP is intentional.
+      # Caddy is the one terminating TLS (KC_PROXY_HEADERS above), so Keycloak itself only
+      # ever speaks plain HTTP, entirely inside the compose network.
+      KC_HTTP_ENABLED: 'true'
+      JAVA_OPTS_APPEND: -Xmx512m
+    volumes:
+      # NOT keycloak/realm-export.deploy.json.template directly — Keycloak's realm importer
+      # does not resolve ${env.*} inside arbitrary client fields like redirectUris/webOrigins
+      # (verified empirically; it errors with "A redirect URI is not a valid URI" on the
+      # unresolved literal). deploy/README.md's bring-up sequence renders the template's
+      # DEPLOY_ORIGIN_PLACEHOLDER with `sed` into this gitignored path before `up -d`.
+      - ./keycloak/realm-export.deploy.json:/opt/keycloak/data/import/realm-export.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Same rationale as the dev fixture's healthcheck (#75): the Keycloak image has bash but
+      # no curl/wget, so this speaks HTTP over /dev/tcp against the management port (9000,
+      # separate from the app port since Keycloak 26). The path is /auth/health/ready, not
+      # /health/ready as in the dev fixture — KC_HTTP_RELATIVE_PATH above shifts the management
+      # port's paths too, verified empirically (a bare /health/ready 404s here).
+      test:
+        - CMD-SHELL
+        - |
+          exec 3<>/dev/tcp/127.0.0.1/9000
+          printf 'GET /auth/health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3
+          grep -q '"status": "UP"' <&3
+      interval: 5s
+      timeout: 5s
+      # Cold JVM start measured at ~52s in local testing (issue #57's memory-budget rationale
+      # already treats Keycloak start as the credit-hungry operation on a burstable VM) — the
+      # 20s start_period alone undercounts that; retries covers the rest.
+      retries: 30
+      start_period: 30s
+
+  console-api:
+    # Pinned by commit SHA (issue #57/#58), never `latest` — DEPLOY_IMAGE_TAG has no default on
+    # purpose, so an unset value fails the pull loudly instead of silently resolving `latest`.
+    image: ghcr.io/konica/erria-work-sample/console-api:${DEPLOY_IMAGE_TAG:?set DEPLOY_IMAGE_TAG to the commit SHA to deploy}
+    restart: unless-stopped
+    # Budget: ~250 MB (issue #57).
+    mem_limit: 384m
+    environment:
+      # Built from the same POSTGRES_* values as the `postgres` service above, rather than
+      # repeated as a second literal, so the two cannot disagree the way .env.example warns
+      # dev's DATABASE_URL and compose.yaml's Postgres credentials can.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:-erria}@postgres:5432/${POSTGRES_DB:-erria_dev}
+      CONSOLE_API_PORT: '3000'
+      WORKER_INTERNAL_URL: http://worker:3100
+      # Unset by default: console-api serves the built console-web SPA itself on this same
+      # origin (ADR-0007), so CORS has nothing to open by default here either.
+      CONSOLE_WEB_ORIGIN: ${CONSOLE_WEB_ORIGIN:-}
+      MESSAGE_DISPATCH_MODE: ${MESSAGE_DISPATCH_MODE:-sandbox}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # No curl/wget in the node:24-slim runtime image either (Dockerfile: "no toolchain") —
+      # Node 24 ships a global fetch, so this needs nothing extra installed.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  worker:
+    image: ghcr.io/konica/erria-work-sample/worker:${DEPLOY_IMAGE_TAG:?set DEPLOY_IMAGE_TAG to the commit SHA to deploy}
+    restart: unless-stopped
+    # Budget: ~200 MB (issue #57).
+    mem_limit: 320m
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:-erria}@postgres:5432/${POSTGRES_DB:-erria_dev}
+      WORKER_PORT: '3100'
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      MESSAGE_DISPATCH_MODE: ${MESSAGE_DISPATCH_MODE:-sandbox}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3100/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    # Issue #57 budgets ~20 MB, but measured steady-state with automatic HTTPS actually active
+    # (TLS termination, OCSP stapling, the certificate management goroutines) came in around
+    # 60 MB in local testing — recorded in the PR. 128m keeps real headroom above that measured
+    # figure rather than the budget's estimate, which undercounted it.
+    mem_limit: 128m
+    # The only service that publishes a host port pair, and it is the only pair published: 80
+    # for the ACME HTTP-01 challenge and the redirect to HTTPS, 443 for the app.
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DEPLOY_DOMAIN: ${DEPLOY_DOMAIN:?set DEPLOY_DOMAIN to the public hostname the provisioning ticket assigns}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:?set LETSENCRYPT_EMAIL for ACME registration/renewal notices}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Named, not anonymous, so a container recreate keeps the issued certificate instead of
+      # re-issuing on every deploy and walking into Let's Encrypt's rate limits (issue #57).
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      console-api:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      # Caddy's admin API listens on 127.0.0.1:2019 inside the container by default (not
+      # published) — asking it for the running config is a cheap proof the process is actually
+      # serving, not just alive. wget is BusyBox's, bundled in the alpine base.
+      test: ['CMD', 'wget', '--quiet', '--output-document=-', 'http://127.0.0.1:2019/config/']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  caddy-data:
+  caddy-config:

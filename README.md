@@ -278,6 +278,25 @@ pnpm --filter worker exec node --import @swc-node/register/esm-register src/main
 Valid job names today are `followup-cadence`, `audit-sample-maintenance`, and
 `stuck-send-reconciliation`; any other name throws.
 
+## Deployment
+
+`compose.deploy.yaml` is a deployment overlay, applied on top of (never instead of)
+`compose.yaml`:
+
+```bash
+docker compose -f compose.yaml -f compose.deploy.yaml up -d
+```
+
+It adds Caddy (TLS termination, the only service publishing host ports), Keycloak (its own
+database on the same Postgres server, heap capped, realm imported from
+[`keycloak/realm-export.deploy.json.template`](keycloak/realm-export.deploy.json.template)), and
+the `console-api` and `worker` app images pinned by commit SHA — and removes Postgres's published
+port, so the database this file starts is not reachable from the internet. See
+[`deploy/README.md`](deploy/README.md) for the full runbook (bring-up, port-scan verification,
+memory recording, cron installation) and
+[ADR-0007](docs/adr/0007-mvp-deploys-to-one-vm-with-docker-compose.md) /
+[the deployment design doc](docs/superpowers/specs/2026-08-04-mvp-deployment-design.md) for why.
+
 ## Seed data & CSV import
 
 The trigger-detection/ICP-scoring pipeline is out of scope (see [Status](#status)), so there is no
@@ -340,7 +359,10 @@ docs/
   superpowers/    specs/ (behavior design) and plans/ (implementation plans)
   agents/         repo agent-skill configuration notes
 design-system/    design tokens and design reference doc
+deploy/           deployment-overlay host config (Caddyfile, crontab, postgres-init/) — see Deployment
+keycloak/         Keycloak realm fixtures — dev (#75) and deploy (#57) — see Deployment
 compose.yaml      local runtime dependencies (PostgreSQL) — see Local dependencies
+compose.deploy.yaml  deployment overlay (Caddy, Keycloak, console-api, worker) — see Deployment
 CONTEXT.md        domain glossary — read this before naming anything new
 ```
 

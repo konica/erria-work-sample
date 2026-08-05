@@ -1,0 +1,17 @@
+# Host crontab for the two scheduled behaviours the behaviour spec requires (ADR-0007,
+# spec §5 follow-up cadence, spec §10 audit-sample maintenance), run as
+# `docker compose run --rm worker --job=<name>` — the same image and `--job` entrypoint the
+# Container Apps Jobs design specified (ADR-0007: "Container Apps Jobs become cron"), so no
+# application code differs between this deployment and the managed target state.
+#
+# Install (as the deploy user, from the repo checkout on the VM, e.g. /opt/erria):
+#   crontab deploy/crontab
+#
+# Times are 5 minutes apart purely to avoid two `docker compose run` invocations racing the
+# same Postgres connection pool on a single-vCPU-burst box at once — the behaviour spec does
+# not mandate an exact time of day for either job, and both job bodies are stubs today (see
+# apps/worker/src/jobs/run-job.ts), so there is no cadence-sensitive behaviour yet to tune
+# this against. Revisit once #40/Plans 2-3 land the real job bodies.
+SHELL=/bin/sh
+0 6 * * * cd /opt/erria && docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker --job=followup-cadence >> /var/log/erria/followup-cadence.log 2>&1
+5 6 * * * cd /opt/erria && docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker --job=audit-sample-maintenance >> /var/log/erria/audit-sample-maintenance.log 2>&1
