@@ -7,14 +7,22 @@
 # Safe to re-run: every step no-ops if the resource already exists.
 set -euo pipefail
 
-RESOURCE_GROUP="erria-tfstate"
-# centralindia, not westeurope: the current subscription's storage account
-# creation is blocked in West Europe ("region not accepting new customers"),
-# matching the same subscription-wide restriction that forced the VM SKU/
-# region choice in infra/terraform/variables.tf. Keep this in sync with that
-# file's `location` default.
-LOCATION="centralindia"
-STORAGE_ACCOUNT="erriatfstate" # must be globally unique; if taken, pick another
+RESOURCE_GROUP="erria-tfstate-us"
+# centralus: matches infra/terraform/variables.tf's `location` default. Not
+# strictly required to match (state storage isn't tied to the resources it
+# describes), but keeping them the same avoids a second region to track for
+# no benefit. See that file's description for why this isn't West Europe —
+# the original ADR-0007 choice is RegionIsOfferRestricted on this subscription.
+#
+# Named "-us" / "us" rather than reusing the original erria-tfstate /
+# erriatfstate: an earlier westeurope-then-centralindia attempt already
+# claimed those names (resource group names are subscription-unique
+# regardless of region; storage account names are unique across all of
+# Azure), and that resource group couldn't be deleted to free them up in
+# this session. It's an orphaned, empty-of-real-data leftover — safe to
+# delete by hand whenever convenient, not urgent.
+LOCATION="centralus"
+STORAGE_ACCOUNT="erriatfstateus" # must be globally unique; if taken, pick another
                                  # and pass -backend-config="storage_account_name=..."
                                  # to `terraform init`.
 CONTAINER="tfstate"

@@ -122,7 +122,7 @@ can't catch this at plan time — it would otherwise surface as a raw ARM 400 pa
 through apply. Run this once, before the first apply:
 
 ```
-az vm list-skus --location westeurope --size Standard_B2s --all -o table
+az vm list-skus --location centralus --size Standard_D2als_v6 --all -o table
 ```
 
 A restriction shows up in the `restrictions` column. It's the documented

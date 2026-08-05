@@ -8,7 +8,7 @@
 # in a given region) is an ARM-level, apply-time rejection — the azurerm
 # provider has no data source that exposes SKU-offer restrictions, so this
 # can't be caught at plan time. Run this once before a first apply:
-#   az vm list-skus --location westeurope --size Standard_B2s --all -o table
+#   az vm list-skus --location centralus --size Standard_D2als_v6 --all -o table
 # A restriction shows up in the `restrictions` column; it's resolved via an
 # Azure support request, not a code change.
 

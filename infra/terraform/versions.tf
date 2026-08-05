@@ -12,8 +12,8 @@ terraform {
   # Terraform) to avoid the chicken-and-egg of Terraform managing the backend
   # it depends on. See infra/terraform/README.md.
   backend "azurerm" {
-    resource_group_name  = "erria-tfstate"
-    storage_account_name = "erriatfstate" # must be globally unique; override with -backend-config if taken
+    resource_group_name  = "erria-tfstate-us"
+    storage_account_name = "erriatfstateus" # must be globally unique; override with -backend-config if taken
     container_name       = "tfstate"
     key                  = "review.tfstate"
   }
