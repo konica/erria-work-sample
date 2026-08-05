@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { PrismaClient } from '@erria/db';
+import { upsertAccount, upsertContact, upsertVessel, type PrismaClient } from '@erria/db';
 import { recordIncomingTrigger } from '@erria/domain';
 import { PRISMA } from '../prisma/prisma.module.js';
 import { WorkerClient } from '../worker-client/worker-client.service.js';
@@ -13,11 +13,14 @@ export class TriggersService {
   ) {}
 
   async receiveTrigger(dto: IncomingTriggerDto) {
-    const account = await this.upsertAccount(dto.account);
-    const vessel = dto.vessel ? await this.upsertVessel(account.id, dto.vessel) : null;
-    if (dto.contact) {
-      await this.upsertContact(account.id, dto.contact);
-    }
+    const { account, vessel } = await this.prisma.$transaction(async (tx) => {
+      const account = await upsertAccount(tx, dto.account);
+      const vessel = dto.vessel ? await upsertVessel(tx, account.id, dto.vessel) : null;
+      if (dto.contact) {
+        await upsertContact(tx, account.id, dto.contact);
+      }
+      return { account, vessel };
+    });
 
     const { triggerId } = await recordIncomingTrigger(this.prisma, {
       accountId: account.id,
@@ -34,77 +37,5 @@ export class TriggersService {
     await this.workerClient.processTrigger(triggerId);
 
     return { triggerId };
-  }
-
-  private async upsertAccount(input: IncomingTriggerDto['account']) {
-    return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.account.findUnique({ where: { externalRef: input.externalRef } });
-
-      if (existing) {
-        return tx.account.update({
-          where: { id: existing.id },
-          data: {
-            companyName: input.companyName,
-            segment: input.segment,
-            hub: input.hub,
-            icpScore: input.icpScore,
-            icpBand: input.icpBand,
-            relationshipSummary: input.relationshipSummary,
-          },
-        });
-      }
-
-      const created = await tx.account.create({
-        data: {
-          externalRef: input.externalRef,
-          companyName: input.companyName,
-          segment: input.segment,
-          hub: input.hub,
-          icpScore: input.icpScore,
-          icpBand: input.icpBand,
-          relationshipSummary: input.relationshipSummary,
-          currentTier: 2,
-          tierRationale: 'New account — rollout default per spec §3 until 2 clean approvals',
-        },
-      });
-
-      await tx.tierHistoryEvent.create({
-        data: {
-          accountId: created.id,
-          eventType: 'create',
-          toTier: 2,
-          reason: 'Account created via incoming trigger — rollout default (spec §3)',
-        },
-      });
-
-      return created;
-    });
-  }
-
-  private async upsertVessel(accountId: string, input: NonNullable<IncomingTriggerDto['vessel']>) {
-    return this.prisma.vessel.upsert({
-      where: { imo: input.imo },
-      update: { name: input.name, flag: input.flag, accountId },
-      create: { accountId, name: input.name, imo: input.imo, flag: input.flag },
-    });
-  }
-
-  private async upsertContact(accountId: string, input: NonNullable<IncomingTriggerDto['contact']>) {
-    // Contact has no unique constraint to upsert against (a person is identified by their email
-    // within an account, but email is nullable), so match explicitly then insert or update.
-    const existing = input.email
-      ? await this.prisma.contact.findFirst({ where: { accountId, email: input.email } })
-      : await this.prisma.contact.findFirst({ where: { accountId, name: input.name } });
-
-    if (existing) {
-      return this.prisma.contact.update({
-        where: { id: existing.id },
-        data: { name: input.name, role: input.role, email: input.email ?? null },
-      });
-    }
-
-    return this.prisma.contact.create({
-      data: { accountId, name: input.name, role: input.role, email: input.email ?? null },
-    });
   }
 }

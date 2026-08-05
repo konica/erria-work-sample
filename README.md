@@ -59,6 +59,10 @@ isn't implemented.
 - `compose.yaml`: the local runtime dependencies (today just PostgreSQL 17, on a named volume with
   a TCP healthcheck), driven by the `compose:up` / `compose:down` / `compose:reset` root scripts.
   See [Local dependencies](#local-dependencies).
+- `packages/db`'s seed script (`pnpm --filter @erria/db run seed`) and CSV import path
+  (`pnpm --filter @erria/db run import:triggers <file>`) — the stand-in for the out-of-scope
+  trigger pipeline. See [Seed data & CSV import](#seed-data--csv-import) and
+  [`docs/csv-import.md`](docs/csv-import.md).
 
 **Not yet built:**
 
@@ -69,8 +73,6 @@ isn't implemented.
   Flow 1, and no approve/edit/send actions or write endpoints exist behind the `Review`,
   `Escalations`, `Audit Trail`, or `Send Audit` nav items — they render as static chrome with a live
   count, not a page.
-- There is no seed script — any demo data in the database was put there by hand or via
-  `POST /internal/triggers` (see above), not by `compose:up` or a migration.
 - Autonomous Tier 1 sending is a documented gap (ADR-0002): `recordIncomingTrigger` throws
   `NotImplementedFlowError` if tiering ever recommends Tier 1.
 - No CI workflow is configured in this checkout.
@@ -276,6 +278,32 @@ pnpm --filter worker exec node --import @swc-node/register/esm-register src/main
 Valid job names today are `followup-cadence`, `audit-sample-maintenance`, and
 `stuck-send-reconciliation`; any other name throws.
 
+## Seed data & CSV import
+
+The trigger-detection/ICP-scoring pipeline is out of scope (see [Status](#status)), so there is no
+automatic way for anything to land in the queue. Two `@erria/db` scripts fill that gap — both load
+`DATABASE_URL` from the workspace-root `.env` themselves, so no `set -a && . ./.env` step needed:
+
+```bash
+pnpm --filter @erria/db run seed
+```
+
+Seeds four fictional accounts from the approved mockup (Song Hong Shipping, Truong Phat Marine,
+Dai Duong Shipping, Vina Offshore Supply — never a real company, vessel, person, or email) that
+together exercise the console: a Tier 2 pending draft, a Tier 3 active escalation, a resolved
+escalation, and a trigger too thin to draft (the abstain path). Idempotent — re-running it against
+an already-seeded database is a no-op, not a duplicate.
+
+```bash
+pnpm --filter @erria/db run import:triggers <path/to/file.csv>
+```
+
+Bulk-loads real Account/Vessel/Contact/Trigger data from a spreadsheet — the documented column
+contract is [`docs/csv-import.md`](docs/csv-import.md). Every row is validated before anything is
+written (a bad row is rejected with its row number and column name, and nothing is written), and
+re-importing the same file updates rows in place by natural key rather than duplicating them. It
+does not invoke drafting — see the doc for why and what to do instead.
+
 ## Root scripts
 
 Defined in the root `package.json`, each fans out to every workspace package via `pnpm -r`:
@@ -303,7 +331,8 @@ apps/
   console-web/    React + Vite — index.html, vite.config.ts, src/App.tsx, src/QueuePage.tsx,
                   src/shell/ (AppShell, Sidebar, Header, ThemeToggle, useNavCounts), src/styles/
 packages/
-  db/             prisma/schema.prisma, prisma/migrations/, src/client.ts, src/test-utils/
+  db/             prisma/schema.prisma, prisma/migrations/, src/client.ts, src/test-utils/,
+                  src/seed/ (seed.ts, import-triggers.ts, csv.ts, upsert-entities.ts)
   domain/         src/index.ts, src/tiering/, src/drafting/, src/errors.ts (@erria/domain)
 docs/
   adr/            architecture decision records
