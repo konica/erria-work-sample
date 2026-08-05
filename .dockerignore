@@ -1,0 +1,20 @@
+# Build context for apps/console-api/Dockerfile and apps/worker/Dockerfile.
+# Keep this in sync with .gitignore's excludes so the image never picks up
+# local state (secrets, prior builds) that a clean checkout wouldn't have.
+
+**/node_modules/
+**/dist/
+packages/*/src/generated/
+.git/
+.env
+.env.*
+.pnpm-store/
+.claude/
+.agents/
+.sandbox
+.extract-design-system
+brainstorm/
+ideation/
+bugs/
+*.log
+/image-sdlc.png
