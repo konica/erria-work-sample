@@ -58,6 +58,7 @@ export async function recordIncomingTrigger(
         verifiabilityNote: input.verifiabilityNote,
         detectedAt: input.detectedAt,
         status: 'processing',
+        hasComplianceDeadlineContent: input.hasComplianceDeadlineContent,
       },
     });
 
