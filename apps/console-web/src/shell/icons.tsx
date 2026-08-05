@@ -26,7 +26,9 @@ export type IconName =
   | 'checkc'
   | 'x'
   | 'xc'
-  | 'robot';
+  | 'robot'
+  | 'lock'
+  | 'logout';
 
 const PATHS: Record<IconName, ReactNode> = {
   queue: (
@@ -124,6 +126,20 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <rect x={4} y={8} width={16} height={12} rx={2} />
       <path d="M12 4v4M9 14h.01M15 14h.01M2 13v2M22 13v2" />
+    </>
+  ),
+  // Ported from the mockup's auth-gate icon map (brainstorm/mockup/Erria-outreach-agent-v07/login.html, ICON.lock).
+  lock: (
+    <>
+      <rect x={4} y={11} width={16} height={10} rx={2} />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
+  logout: (
+    <>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="M16 17l5-5-5-5" />
+      <path d="M21 12H9" />
     </>
   ),
 };
