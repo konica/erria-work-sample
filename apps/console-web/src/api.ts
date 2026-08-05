@@ -57,3 +57,35 @@ export const api = {
       json<{ message: { id: string; status: string } }>,
     ),
 };
+
+export interface AuditSampleRow {
+  id: string;
+  accountId: string;
+  company: string;
+  body: string;
+  sentAt: string | null;
+  sampledAt: string;
+  reviewStatus: 'unreviewed' | 'fine' | 'concerning';
+  reviewedBy: string | null;
+}
+
+interface AuditSampleList {
+  items: AuditSampleRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export const auditApi = {
+  list: (status?: 'unreviewed' | 'fine' | 'concerning') =>
+    fetch(status ? `/api/audit-samples?status=${status}` : '/api/audit-samples').then(
+      json<AuditSampleList>,
+    ),
+
+  mark: (id: string, verdict: 'fine' | 'concerning') =>
+    fetch(`/api/audit-samples/${id}/mark`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verdict }),
+    }).then(json<{ auditSample: { id: string; reviewStatus: string } }>),
+};
