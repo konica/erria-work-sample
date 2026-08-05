@@ -15,6 +15,9 @@ describe('App navigation', () => {
         if (url === '/api/nav-counts') {
           return { ok: true, json: async () => ({ review: 0, escalation: 0 }) };
         }
+        if (url === '/api/me') {
+          return { ok: true, json: async () => ({ sub: 'user-1', name: 'Test User', roles: ['admin'] }) };
+        }
         return emptyList();
       }),
     );
