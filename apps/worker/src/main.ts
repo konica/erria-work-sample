@@ -23,7 +23,7 @@ async function main() {
 
   if (jobArg) {
     const jobName = jobArg.slice('--job='.length);
-    await runJob(jobName);
+    await runJob(jobName, { dispatchMode });
     process.exit(0);
   }
 
