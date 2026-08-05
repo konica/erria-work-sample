@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Icon } from './shell/icons.js';
+import { apiFetch } from './api.js';
 
 interface QueueRow {
   accountId: string;
@@ -48,7 +49,7 @@ export function QueuePage({ onOpenAccount }: { onOpenAccount: (accountId: string
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/queue')
+    apiFetch('/api/queue')
       .then((response) => {
         if (!response.ok) throw new Error(`GET /api/queue failed: ${response.status}`);
         return response.json();

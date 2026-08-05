@@ -1,4 +1,5 @@
 import { ThemeToggle } from './ThemeToggle.js';
+import { LogoutButton } from './LogoutButton.js';
 import { SCREENS, type ScreenKey } from './screens.js';
 
 export function Header({ active }: { active: ScreenKey }) {
@@ -20,6 +21,7 @@ export function Header({ active }: { active: ScreenKey }) {
         <input placeholder="Search accounts, vessels…" aria-label="Search" />
       </div>
       <ThemeToggle />
+      <LogoutButton />
     </div>
   );
 }
