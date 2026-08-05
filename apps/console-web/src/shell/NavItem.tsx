@@ -6,12 +6,13 @@ export interface NavItemProps {
   active: boolean;
   variant?: 'attention';
   count?: number;
+  onClick?: () => void;
 }
 
-export function NavItem({ icon, label, active, variant, count }: NavItemProps) {
+export function NavItem({ icon, label, active, variant, count, onClick }: NavItemProps) {
   const className = ['nav-item', active ? 'active' : null, variant ?? null].filter(Boolean).join(' ');
   return (
-    <button type="button" className={className}>
+    <button type="button" className={className} onClick={onClick}>
       <Icon name={icon} />
       <span>{label}</span>
       {count ? <span className="count">{count}</span> : null}

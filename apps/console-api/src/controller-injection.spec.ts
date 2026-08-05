@@ -9,6 +9,8 @@ import { TriggersController } from './triggers/triggers.controller.js';
 import { TriggersService } from './triggers/triggers.service.js';
 import { NavCountsController } from './nav-counts/nav-counts.controller.js';
 import { NavCountsService } from './nav-counts/nav-counts.service.js';
+import { AuditController } from './audit/audit.controller.js';
+import { AuditService } from './audit/audit.service.js';
 
 // Regression guard for #35.
 //
@@ -110,5 +112,35 @@ describe('controller constructor injection (regression guard for #35)', () => {
       escalation: 1,
     });
     expect(get).toHaveBeenCalled();
+  });
+
+  it('injects AuditService into AuditController', async () => {
+    const page = { items: [], total: 0, page: 1, pageSize: 20 };
+    const list = vi.fn().mockResolvedValue(page);
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AuditController],
+      providers: [{ provide: AuditService, useValue: { list } }],
+    }).compile();
+
+    // Throws `Cannot read properties of undefined (reading 'list')` when metadata is missing.
+    await expect(moduleRef.get(AuditController).list()).resolves.toEqual(page);
+  });
+
+  it('passes the mark verdict and the authenticated reviewer through to AuditService', async () => {
+    const mark = vi.fn().mockResolvedValue({
+      auditSample: { id: 'aud_1', reviewStatus: 'concerning', reviewedBy: 'Minh Tran', reviewedAt: new Date() },
+    });
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AuditController],
+      providers: [{ provide: AuditService, useValue: { mark } }],
+    }).compile();
+
+    await moduleRef
+      .get(AuditController)
+      .mark('aud_1', { verdict: 'concerning' }, { sub: 'u1', name: 'Minh Tran', roles: [] });
+
+    expect(mark).toHaveBeenCalledWith('aud_1', 'concerning', 'Minh Tran');
   });
 });
