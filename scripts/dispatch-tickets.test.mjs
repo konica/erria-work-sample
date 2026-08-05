@@ -85,6 +85,11 @@ test('buildPrompt: instructs the PR title format', () => {
   assert.match(prompt, /"Ticket #12 — An approved message actually sends"/);
 });
 
+test('buildPrompt: instructs the exact "Closes #<n>." syntax GitHub auto-close requires', () => {
+  const prompt = buildPrompt({ number: 12, title: 'x', branch: 'b', repo: 'r' });
+  assert.match(prompt, /"Closes #12\."/);
+});
+
 test('parseJobId: extracts the id from `claude --bg`\'s "backgrounded · <id>" output', () => {
   const output = [
     'backgrounded · b3a1ebc8',

@@ -1,0 +1,42 @@
+name: Close ticket on merge
+
+# Safety net for scripts/dispatch-tickets.mjs's dispatched PRs. Each carries a title of the form
+# "Ticket #<n> — <title>" (see buildPrompt in dispatch-tickets.mjs), which the agent is also told
+# to reference in the PR body via a "Closes #<n>." line so GitHub auto-closes the ticket on merge.
+# That line depends on the agent's phrasing matching GitHub's closing-keyword syntax exactly
+# (a paraphrase like "closes the X described in issue #12" does not count) -- issues #12 and #14
+# both stayed open after their PRs merged because of this. This workflow closes the ticket
+# straight from the PR title instead, so ticket status no longer depends on body wording at all.
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  close-ticket:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Close the ticket named in the PR title
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          number=$(echo "$PR_TITLE" | grep -oP '^Ticket #\K\d+' || true)
+          if [ -z "$number" ]; then
+            echo "PR title doesn't match 'Ticket #<n> — ...'; nothing to close."
+            exit 0
+          fi
+
+          state=$(gh issue view "$number" --repo "$REPO" --json state --jq .state 2>/dev/null || echo "")
+          if [ "$state" != "OPEN" ]; then
+            echo "Issue #$number is already $state; nothing to do."
+            exit 0
+          fi
+
+          gh issue close "$number" --repo "$REPO" \
+            --comment "Closed automatically: merged via #$PR_NUMBER."

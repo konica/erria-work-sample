@@ -41,7 +41,10 @@ export function buildPrompt({ number, title, branch, repo }) {
 - Work in an isolated git worktree on branch ${branch}.
 - Read the issue (\`gh issue view ${number} --comments\`), plus CONTEXT.md and any ADRs it references.
 - Follow the repo's existing conventions and run the test suite.
-- Commit, push ${branch}, and open a PR titled "Ticket #${number} — ${title}".
+- Commit, push ${branch}, and open a PR titled "Ticket #${number} — ${title}", with a line reading
+  exactly "Closes #${number}." somewhere in the body -- GitHub only auto-closes an issue on merge
+  when a closing keyword is immediately followed by the reference, so a paraphrase like "closes the
+  X described in issue #${number}" will not close it.
 - Leave issue #${number} open -- it gets closed when the PR merges, not by you.`;
 }
 
