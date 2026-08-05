@@ -1,0 +1,21 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored —
+# never commit real values. admin_ssh_public_key is NOT set here: export it
+# as TF_VAR_admin_ssh_public_key instead (see ../README.md).
+
+location             = "westeurope"
+resource_group_name  = "erria-review"
+vm_size              = "Standard_B2s"
+
+backup_storage_account_name = "erriareviewbackups" # must be globally unique
+
+# DNS: leave manage_dns_in_azure = false if Erria's domain is not delegated
+# to Azure DNS. Otherwise set these three and point dns_record_name +
+# dns_zone_name at the subdomain (e.g. "outreach" + "erria.com" for
+# outreach.erria.com). Never cloudapp.azure.com — see infra/terraform/dns.tf.
+manage_dns_in_azure          = false
+# dns_zone_name              = "erria.com"
+# dns_zone_resource_group_name = "erria-dns"
+# dns_record_name            = "outreach"
+
+budget_amount_usd   = 60
+budget_alert_emails = ["ops@erria.example"]
