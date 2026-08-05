@@ -73,6 +73,39 @@ describe('dispatchMessage', () => {
     expect(refreshedAccount.cleanApprovalsCount).toBe(1);
   });
 
+  it('leaves a human-authored reply labeled human_reply, not agent_sent, once it goes out', async () => {
+    const account = await testDb.prisma.account.create({
+      data: {
+        companyName: 'Song Hong Shipping',
+        segment: 'Offshore support vessel operator',
+        hub: 'Haiphong',
+        icpScore: 90,
+        icpBand: 'high',
+        relationshipSummary: 'New account',
+        currentTier: 3,
+        tierRationale: 'Escalated',
+        contacts: { create: { name: 'Ms. Lan Pham', role: 'Technical Superintendent', email: 'lan.pham@example.com' } },
+      },
+    });
+    const message = await testDb.prisma.message.create({
+      data: {
+        accountId: account.id,
+        role: 'human_reply',
+        body: 'Thanks for asking — here is an indicative range...',
+        status: 'approved',
+        tierContext: 3,
+        decidedBy: 'Minh Tran',
+        decidedAt: new Date(),
+      },
+    });
+
+    await dispatchMessage('sandbox', { messageId: message.id }, { prisma: testDb.prisma });
+
+    const refreshed = await testDb.prisma.message.findUniqueOrThrow({ where: { id: message.id } });
+    expect(refreshed.status).toBe('sent');
+    expect(refreshed.role).toBe('human_reply');
+  });
+
   it('derives the subject line from the trigger and vessel and renders it, following spec §6', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const account = await testDb.prisma.account.create({

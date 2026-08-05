@@ -13,6 +13,8 @@ import { AuditController } from './audit/audit.controller.js';
 import { AuditService } from './audit/audit.service.js';
 import { InboundController } from './inbound/inbound.controller.js';
 import { InboundService } from './inbound/inbound.service.js';
+import { SettingsController } from './settings/settings.controller.js';
+import { SettingsService } from './settings/settings.service.js';
 
 // Regression guard for #35.
 //
@@ -161,5 +163,21 @@ describe('controller constructor injection (regression guard for #35)', () => {
       escalated: false,
     });
     expect(receiveInbound).toHaveBeenCalledWith(dto);
+  });
+
+  it('injects SettingsService into SettingsController', async () => {
+    const read = vi.fn().mockResolvedValue({ basic: {}, advanced: {}, locked: {} });
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [SettingsController],
+      providers: [{ provide: SettingsService, useValue: { read } }],
+    }).compile();
+
+    await expect(moduleRef.get(SettingsController).read()).resolves.toEqual({
+      basic: {},
+      advanced: {},
+      locked: {},
+    });
+    expect(read).toHaveBeenCalled();
   });
 });

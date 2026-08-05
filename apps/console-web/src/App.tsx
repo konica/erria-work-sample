@@ -4,6 +4,7 @@ import type { ScreenKey } from './shell/screens.js';
 import { QueuePage } from './QueuePage.js';
 import { AccountDetailPage } from './AccountDetailPage.js';
 import { SendAuditPage } from './SendAuditPage.js';
+import { SettingsPage } from './SettingsPage.js';
 import { AuthGate } from './auth/AuthGate.js';
 import { initAuth } from './auth/authStore.js';
 import { useAuth } from './auth/useAuth.js';
@@ -30,10 +31,12 @@ export function App() {
   }
 
   let content;
-  if (screen === 'queue' && openAccountId) {
-    content = <AccountDetailPage accountId={openAccountId} onBack={() => setOpenAccountId(null)} />;
+  if (screen === 'settings') {
+    content = <SettingsPage />;
   } else if (screen === 'sendaudit') {
     content = <SendAuditPage />;
+  } else if (screen === 'queue' && openAccountId) {
+    content = <AccountDetailPage accountId={openAccountId} onBack={() => setOpenAccountId(null)} />;
   } else {
     content = <QueuePage onOpenAccount={setOpenAccountId} />;
   }

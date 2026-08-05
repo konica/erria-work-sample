@@ -54,7 +54,12 @@ export function Sidebar({
       />
 
       <div className="rail-foot">
-        <NavItem icon={SCREENS.settings.icon} label={SCREENS.settings.label} active={active === 'settings'} />
+        <NavItem
+          icon={SCREENS.settings.icon}
+          label={SCREENS.settings.label}
+          active={active === 'settings'}
+          onClick={onNavigate ? () => onNavigate('settings') : undefined}
+        />
         <div className="rail-user">
           <div className="avatar">MT</div>
           <div>
