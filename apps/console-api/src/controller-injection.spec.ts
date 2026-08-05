@@ -11,6 +11,8 @@ import { NavCountsController } from './nav-counts/nav-counts.controller.js';
 import { NavCountsService } from './nav-counts/nav-counts.service.js';
 import { AuditController } from './audit/audit.controller.js';
 import { AuditService } from './audit/audit.service.js';
+import { InboundController } from './inbound/inbound.controller.js';
+import { InboundService } from './inbound/inbound.service.js';
 
 // Regression guard for #35.
 //
@@ -142,5 +144,22 @@ describe('controller constructor injection (regression guard for #35)', () => {
       .mark('aud_1', { verdict: 'concerning' }, { sub: 'u1', name: 'Minh Tran', roles: [] });
 
     expect(mark).toHaveBeenCalledWith('aud_1', 'concerning', 'Minh Tran');
+  });
+
+  it('injects InboundService into InboundController', async () => {
+    const receiveInbound = vi.fn().mockResolvedValue({ messageId: 'msg-1', escalated: false });
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [InboundController],
+      providers: [{ provide: InboundService, useValue: { receiveInbound } }],
+    }).compile();
+
+    const dto = { accountId: 'acc-1', body: 'hello', receivedAt: new Date().toISOString() } as never;
+    // Throws `Cannot read properties of undefined (reading 'receiveInbound')` when metadata is missing.
+    await expect(moduleRef.get(InboundController).receive(dto)).resolves.toEqual({
+      messageId: 'msg-1',
+      escalated: false,
+    });
+    expect(receiveInbound).toHaveBeenCalledWith(dto);
   });
 });
