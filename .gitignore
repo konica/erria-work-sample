@@ -1,7 +1,9 @@
 .sandbox
 .extract-design-system
 brainstorm/backup/
-.claude
+.claude/settings.local.json
+.claude/dispatch-logs
+.claude/worktrees
 .agents
 ideation
 agentic-sdlc-agent-mapping.md

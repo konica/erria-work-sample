@@ -2,10 +2,8 @@ import { Body, Controller, Logger, Param, Patch, Post } from '@nestjs/common';
 import { MessagesService } from './messages.service.js';
 import { EditMessageDto } from './dto/edit-message.dto.js';
 import { WorkerClient } from '../worker-client/worker-client.service.js';
-
-// Auth is a stated non-goal for this phase (architecture §0). One operator, named here, until
-// Keycloak/OIDC is wired — at which point this is replaced by the authenticated principal.
-const DECIDED_BY = 'Minh Tran';
+import { CurrentUser } from '../auth/current-user.decorator.js';
+import type { AuthenticatedUser } from '../auth/authenticated-user.js';
 
 @Controller('api/accounts/:accountId/messages')
 export class MessagesController {
@@ -34,14 +32,22 @@ export class MessagesController {
   }
 
   @Post(':messageId/reject')
-  async reject(@Param('accountId') accountId: string, @Param('messageId') messageId: string) {
-    const message = await this.messagesService.rejectDraft(accountId, messageId, DECIDED_BY);
+  async reject(
+    @Param('accountId') accountId: string,
+    @Param('messageId') messageId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const message = await this.messagesService.rejectDraft(accountId, messageId, user.name);
     return { message: { id: message.id, status: message.status } };
   }
 
   @Post(':messageId/approve')
-  async approve(@Param('accountId') accountId: string, @Param('messageId') messageId: string) {
-    const message = await this.messagesService.approveDraft(accountId, messageId, DECIDED_BY);
+  async approve(
+    @Param('accountId') accountId: string,
+    @Param('messageId') messageId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const message = await this.messagesService.approveDraft(accountId, messageId, user.name);
 
     // Deliberately not awaited: the human-facing request returns as soon as the decision is
     // recorded (architecture §3). If this call fails, the message sits 'approved' with no sentAt —

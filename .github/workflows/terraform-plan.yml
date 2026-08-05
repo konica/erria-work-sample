@@ -1,0 +1,46 @@
+name: Terraform plan (review infra)
+
+# Plan-only, for reviewability of infra diffs. Never applies, never destroys —
+# terraform apply/destroy stay local and human-run (see infra/terraform/README.md).
+# Reader-only RBAC via OIDC: this workflow can read Azure state to produce an
+# accurate plan; it cannot change anything.
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/**'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - run: terraform init
+
+      - run: terraform validate
+
+      - run: terraform plan -no-color -input=false
+        env:
+          # SSH public key only — no secret material. Set as a repo/environment
+          # variable, not a secret, since it isn't sensitive; kept as a distinct
+          # var name so it's obvious this is the same value infra/terraform/README.md
+          # describes exporting locally.
+          TF_VAR_admin_ssh_public_key: ${{ vars.REVIEW_VM_SSH_PUBLIC_KEY }}

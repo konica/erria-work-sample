@@ -9,6 +9,12 @@ import { TriggersController } from './triggers/triggers.controller.js';
 import { TriggersService } from './triggers/triggers.service.js';
 import { NavCountsController } from './nav-counts/nav-counts.controller.js';
 import { NavCountsService } from './nav-counts/nav-counts.service.js';
+import { AuditController } from './audit/audit.controller.js';
+import { AuditService } from './audit/audit.service.js';
+import { InboundController } from './inbound/inbound.controller.js';
+import { InboundService } from './inbound/inbound.service.js';
+import { SettingsController } from './settings/settings.controller.js';
+import { SettingsService } from './settings/settings.service.js';
 
 // Regression guard for #35.
 //
@@ -110,5 +116,68 @@ describe('controller constructor injection (regression guard for #35)', () => {
       escalation: 1,
     });
     expect(get).toHaveBeenCalled();
+  });
+
+  it('injects AuditService into AuditController', async () => {
+    const page = { items: [], total: 0, page: 1, pageSize: 20 };
+    const list = vi.fn().mockResolvedValue(page);
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AuditController],
+      providers: [{ provide: AuditService, useValue: { list } }],
+    }).compile();
+
+    // Throws `Cannot read properties of undefined (reading 'list')` when metadata is missing.
+    await expect(moduleRef.get(AuditController).list()).resolves.toEqual(page);
+  });
+
+  it('passes the mark verdict and the authenticated reviewer through to AuditService', async () => {
+    const mark = vi.fn().mockResolvedValue({
+      auditSample: { id: 'aud_1', reviewStatus: 'concerning', reviewedBy: 'Minh Tran', reviewedAt: new Date() },
+    });
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AuditController],
+      providers: [{ provide: AuditService, useValue: { mark } }],
+    }).compile();
+
+    await moduleRef
+      .get(AuditController)
+      .mark('aud_1', { verdict: 'concerning' }, { sub: 'u1', name: 'Minh Tran', roles: [] });
+
+    expect(mark).toHaveBeenCalledWith('aud_1', 'concerning', 'Minh Tran');
+  });
+
+  it('injects InboundService into InboundController', async () => {
+    const receiveInbound = vi.fn().mockResolvedValue({ messageId: 'msg-1', escalated: false });
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [InboundController],
+      providers: [{ provide: InboundService, useValue: { receiveInbound } }],
+    }).compile();
+
+    const dto = { accountId: 'acc-1', body: 'hello', receivedAt: new Date().toISOString() } as never;
+    // Throws `Cannot read properties of undefined (reading 'receiveInbound')` when metadata is missing.
+    await expect(moduleRef.get(InboundController).receive(dto)).resolves.toEqual({
+      messageId: 'msg-1',
+      escalated: false,
+    });
+    expect(receiveInbound).toHaveBeenCalledWith(dto);
+  });
+
+  it('injects SettingsService into SettingsController', async () => {
+    const read = vi.fn().mockResolvedValue({ basic: {}, advanced: {}, locked: {} });
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [SettingsController],
+      providers: [{ provide: SettingsService, useValue: { read } }],
+    }).compile();
+
+    await expect(moduleRef.get(SettingsController).read()).resolves.toEqual({
+      basic: {},
+      advanced: {},
+      locked: {},
+    });
+    expect(read).toHaveBeenCalled();
   });
 });

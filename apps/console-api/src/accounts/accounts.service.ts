@@ -43,4 +43,25 @@ export class AccountsService {
         : null,
     };
   }
+
+  async tierHistory(accountId: string) {
+    const events = await this.prisma.tierHistoryEvent.findMany({
+      where: { accountId },
+      orderBy: { occurredAt: 'desc' },
+    });
+
+    return {
+      items: events.map((event) => ({
+        id: event.id,
+        eventType: event.eventType,
+        fromTier: event.fromTier,
+        toTier: event.toTier,
+        reason: event.reason,
+        occurredAt: event.occurredAt.toISOString(),
+        // The console tags human overrides distinctly so a reviewer scanning the timeline can
+        // tell system-driven from human-driven entries at a glance.
+        isManual: event.eventType === 'manual_override',
+      })),
+    };
+  }
 }

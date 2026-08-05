@@ -40,6 +40,13 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.4
+    # compose.yaml's own `keycloak` service (#75) is dev-only and sets a custom `entrypoint:`
+    # (a bash wrapper that seeds dev users' passwords via kcadm) plus a published port — neither
+    # belongs in a public deployment, and entrypoint isn't a field this overlay can leave
+    # inherited. !override resets it back to the image's real default
+    # (verified via `docker inspect`: ["/opt/keycloak/bin/kc.sh"]) so `command` below runs
+    # directly against production Keycloak, not through the dev-only wrapper script.
+    entrypoint: !override ['/opt/keycloak/bin/kc.sh']
     # start, not start-dev (production mode requires KC_HOSTNAME and a real proxy in front of
     # it — both set below) — --import-realm loads keycloak/realm-export.deploy.json on every
     # boot. Unlike the dev fixture (#75), this one seeds no users: per issue #59, reviewer/admin
@@ -47,6 +54,11 @@ services:
     # path is never reachable from the internet) once the realm exists, not fixture-seeded with
     # a known password.
     command: start --import-realm
+    # compose.yaml's `keycloak` publishes ${KEYCLOAK_PORT:-8080}:8080 for local dev — Compose
+    # concatenates list fields across files by default (same reasoning as postgres's `ports`
+    # above), so without !override that mapping would leak straight through to a public
+    # deployment. Caddy (deploy/Caddyfile) is the only path to Keycloak here.
+    ports: !override []
     restart: unless-stopped
     # Budget: ~800 MB (issue #57) — JVM heap capped at 512m below, plus JVM/Quarkus overhead on
     # top of the heap. 1024m gives that overhead room without letting one leak threaten the box.
@@ -71,7 +83,12 @@ services:
       # ever speaks plain HTTP, entirely inside the compose network.
       KC_HTTP_ENABLED: 'true'
       JAVA_OPTS_APPEND: -Xmx512m
-    volumes:
+    # !override, not additive: compose.yaml's `keycloak` mounts its own realm file and
+    # dev-entrypoint.sh at overlapping/same-purpose paths — concatenating would either
+    # duplicate the container's realm-import target (Docker rejects two binds at one target
+    # path) or leave dev's realm file mounted alongside/instead of the deploy one, depending on
+    # merge order. This replaces the list outright with only what the deploy realm needs.
+    volumes: !override
       # NOT keycloak/realm-export.deploy.json.template directly — Keycloak's realm importer
       # does not resolve ${env.*} inside arbitrary client fields like redirectUris/webOrigins
       # (verified empirically; it errors with "A redirect URI is not a valid URI" on the
@@ -115,6 +132,14 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:-erria}@postgres:5432/${POSTGRES_DB:-erria_dev}
       CONSOLE_API_PORT: '3000'
       WORKER_INTERNAL_URL: http://worker:3100
+      # NOT the internal http://keycloak:8080 address: JwtVerifierService (#77) builds the
+      # JWKS fetch URL from this same value it checks the token's `iss` claim against, and
+      # Keycloak stamps issued tokens with its externally-visible issuer (KC_HOSTNAME +
+      # KC_HTTP_RELATIVE_PATH above) — https://<domain>/auth/realms/erria, never the compose
+      # network name. Using the internal address here would fetch the right keys but reject
+      # every real token on an issuer mismatch. The outbound JWKS fetch this causes is a normal
+      # HTTPS round trip through Caddy to the deployment's own public hostname.
+      KEYCLOAK_ISSUER_URL: https://${DEPLOY_DOMAIN}/auth/realms/erria
       # Unset by default: console-api serves the built console-web SPA itself on this same
       # origin (ADR-0007), so CORS has nothing to open by default here either.
       CONSOLE_WEB_ORIGIN: ${CONSOLE_WEB_ORIGIN:-}
