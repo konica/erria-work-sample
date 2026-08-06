@@ -5,6 +5,7 @@ import {
   dispatchMessage,
   evaluateAutonomousSend,
   newFactsSince,
+  readSettingsFailClosed,
   TONE_SYSTEM_PROMPT,
   DRAFT_MODEL_ID,
   type DispatchMode,
@@ -34,7 +35,7 @@ export async function runFollowupCadence(
   anthropic: Anthropic,
   dispatchMode: DispatchMode,
 ): Promise<FollowupResult> {
-  const settings = await prisma.setting.findUnique({ where: { id: 1 } });
+  const settings = await readSettingsFailClosed(prisma);
   const maxFollowups = settings?.maxFollowups ?? 2;
   const minDays = settings?.minDaysBetweenFollowups ?? 5;
 

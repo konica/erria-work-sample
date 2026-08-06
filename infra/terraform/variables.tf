@@ -106,6 +106,18 @@ variable "tls_expiry_alert_threshold_days" {
   default     = 14
 }
 
+variable "audit_sample_backlog_alert_threshold_hours" {
+  description = "Age of the oldest unreviewed AuditSample (hours) that fires the backlog alert (issue #62). Sampling is worthless if nobody marks the samples; 48 hours is a starting point for a two-person team checking in periodically, not a response SLA (§11 explicitly defers one) — tune once real review cadence is observed."
+  type        = number
+  default     = 48
+}
+
+variable "claude_api_spend_alert_threshold_usd" {
+  description = "Estimated month-to-date Claude API spend (USD) that fires the alert (issue #62) — separate from var.budget_amount_usd, which covers Azure infrastructure spend only. The estimate is computed from LlmCall token counts at list pricing (apps/worker/src/jobs/report-alerting-metrics.ts), not the vendor invoice. A starting point sized for a two-person team's review-phase usage; tune once a real month of usage is observed."
+  type        = number
+  default     = 100
+}
+
 variable "tags" {
   description = "Tags applied to every resource this module creates."
   type        = map(string)

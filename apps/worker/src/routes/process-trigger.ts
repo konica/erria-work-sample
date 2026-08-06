@@ -6,6 +6,7 @@ import {
   dispatchMessage,
   evaluateAutonomousSend,
   shouldSampleSend,
+  readSettingsFailClosed,
   TONE_SYSTEM_PROMPT,
   DRAFT_MODEL_ID,
   type DispatchMode,
@@ -118,7 +119,7 @@ export function registerProcessTriggerRoute(
 
       // Tier 1: the account has earned permission to send unreviewed. Whether it applies to THIS
       // message is the gate's decision (autonomous-send design §2).
-      const settings = await deps.prisma.setting.findUnique({ where: { id: 1 } });
+      const settings = await readSettingsFailClosed(deps.prisma);
       const recipient = trigger.account.contacts.find((contact) => contact.email)?.email;
       const blockingEscalation = await deps.prisma.escalation.findFirst({
         where: { accountId: trigger.accountId, status: 'active', agentSendDisabled: true },
