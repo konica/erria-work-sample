@@ -10,6 +10,9 @@ This targets **operator workstations**, not the review VM. The VM installs its o
 It installs tools only — it never runs `az login`, `terraform apply`, or `quickstart.sh` itself.
 Provisioning stays human-run for the reasons in the Terraform README's "Why this stays human-run".
 
+If you do not already have Ansible, start at [Install Ansible first](#install-ansible-first) —
+nothing below runs without it, and the version your distro ships may be too old.
+
 ## What it installs
 
 | Package | Why |
@@ -23,14 +26,87 @@ Provisioning stays human-run for the reasons in the Terraform README's "Why this
 On most machines only the first two are actually missing; the rest are listed so a bare host ends
 up runnable in one pass instead of failing partway through the script on a missing `jq`.
 
-## Requirements
+## Install Ansible first
+
+Ansible only has to exist on the machine you run the command *from* — the control node. For the
+common case, setting up the laptop you are sitting at, the control node and the target are the
+same machine.
+
+`ansible-core` is enough; the larger `ansible` bundle is not needed. Every task here uses an
+`ansible.builtin.*` module, so there are no collections to install and no `requirements.yml` to
+apply.
+
+### Debian / Ubuntu
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ansible-core
+```
+
+Then check what that actually gave you — see [Minimum version](#minimum-version). Ubuntu 22.04's
+`ansible-core` is 2.12, one release too old for this playbook; on 22.04 use the pipx route below
+instead.
+
+### macOS
+
+```bash
+brew install ansible
+```
+
+Homebrew tracks upstream closely, so this is always new enough. macOS works fine as a control
+node; it cannot be a *target* — the playbook asserts a Debian-family host and stops.
+
+### Any OS with Python 3 — pipx
+
+The portable route, and the one to use when the distro package is too old or missing:
+
+```bash
+sudo apt-get install -y pipx        # or: python3 -m pip install --user pipx
+pipx install ansible-core
+pipx ensurepath                     # then restart the shell so ~/.local/bin is on PATH
+```
+
+### Windows
+
+There is no native Windows control node. Install Ubuntu under WSL2 and follow the Debian/Ubuntu
+route inside it.
+
+### Minimum version
+
+**ansible-core 2.13 or newer.** The Terraform pin uses the `apt` module's
+`allow_change_held_packages`, added in 2.13, alongside `allow_downgrade`, added in 2.12. An older
+control node is worse than a clean refusal: the run writes both apt repositories and *then* fails
+at "Install Terraform" with `Unsupported parameters for (ansible.builtin.apt) module:
+allow_change_held_packages`, leaving a half-configured host.
+
+| Control node | Ships | Usable |
+|---|---|---|
+| Ubuntu 22.04 | ansible-core 2.12 | No — use pipx |
+| Ubuntu 24.04 | ansible-core 2.16 | Yes |
+| Ubuntu 25.10 / 26.04 | ansible-core 2.19 / 2.20 | Yes |
+| Debian 12 | ansible-core 2.14 | Yes |
+| Debian 13 | ansible-core 2.19 | Yes |
+| Homebrew / pipx | current upstream | Yes |
+
+### Verify before running the playbook
+
+```bash
+ansible --version
+ansible -i infra/ansible/localhost.ini provisioning_workstations -m ansible.builtin.ping
+```
+
+The first line of `ansible --version` must read 2.13 or higher. The ping should answer
+`SUCCESS => {"ping": "pong"}`. If it prints `[WARNING]: No hosts matched` instead, the inventory
+or group name is wrong — the same trap described under "Running it" below.
+
+## Requirements on the target
 
 Debian-family host (the playbook asserts this and stops otherwise). On macOS use
 `brew install azure-cli terraform` instead; on RHEL-family hosts, the vendors' yum repos.
 
-Ansible on the machine you run *from* — `sudo apt-get install -y ansible-core`. You do not need
-Ansible on the target: the playbook bootstraps `python3-apt` over `raw` before using any apt
-module, so a stock host works as-is.
+`python3`, plus — for a remote target — SSH access and a way to become root (`--ask-become-pass`,
+or a passwordless sudo rule). You do not need Ansible on the target: the playbook bootstraps
+`python3-apt` over `raw` before using any apt module, so a stock host works as-is.
 
 ## Running it
 
