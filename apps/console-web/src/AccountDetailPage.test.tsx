@@ -48,22 +48,59 @@ describe('AccountDetailPage', () => {
     vi.stubGlobal('fetch', mockFetch());
   });
 
-  it('renders the dossier and the pending draft', async () => {
+  it('renders the pending draft on the default work tab', async () => {
     render(<AccountDetailPage accountId="acc_1" onBack={() => {}} />);
 
     await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
-    expect(screen.getByText('MV Song Hong Pioneer')).toBeInTheDocument();
     expect(screen.getByText(/Hi Ms\. Pham/)).toBeInTheDocument();
   });
 
-  it('renders inside the mockup detail-grid, not ad-hoc layout', async () => {
+  it('renders inside the mockup detail-tabs, not the old two-column grid', async () => {
     render(<AccountDetailPage accountId="acc_1" onBack={() => {}} />);
     await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
 
     expect(document.querySelector('.detail-top')).toBeInTheDocument();
-    expect(document.querySelector('.detail-grid')).toBeInTheDocument();
-    expect(document.querySelector('.dossier')).toBeInTheDocument();
+    expect(document.querySelector('.detail-tabs')).toBeInTheDocument();
+    expect(document.querySelector('.detail-grid')).not.toBeInTheDocument();
     expect(document.querySelector('.msg.draft')).toBeInTheDocument();
+  });
+
+  it('defaults to the work tab and switches tabs on click', async () => {
+    render(<AccountDetailPage accountId="acc_1" onBack={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
+
+    expect(screen.getByRole('button', { name: /draft review/i })).toHaveClass('active');
+    expect(document.querySelector('.dossier')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /account info/i }));
+    expect(screen.getByText('MV Song Hong Pioneer')).toBeInTheDocument();
+    expect(screen.queryByText(/Hi Ms\. Pham/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /tier history/i }));
+    expect(document.querySelector('[data-od-id="detail-history"]')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /resolution.*outcome/i }));
+    expect(screen.getByText(/no closed escalations yet/i)).toBeInTheDocument();
+  });
+
+  it('labels the work tab by tier and resets to it when switching accounts', async () => {
+    const { rerender } = render(<AccountDetailPage accountId="acc_1" onBack={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /draft review/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /account info/i }));
+    expect(screen.getByRole('button', { name: /account info/i })).toHaveClass('active');
+
+    vi.stubGlobal(
+      'fetch',
+      mockFetch({
+        account: { ...detail.account, id: 'acc_2', companyName: 'Other Co', currentTier: 3 },
+      }),
+    );
+    rerender(<AccountDetailPage accountId="acc_2" onBack={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText('Other Co')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /^escalation$/i })).toHaveClass('active');
   });
 
   it('shows the sending state after approving', async () => {
