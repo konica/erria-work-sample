@@ -1,0 +1,87 @@
+/*
+ * #99: Erria colors/spacing/radius layered on top of keycloak.v2's Patternfly v5 markup.
+ *
+ * tokens.css here is *not* a copy — compose.yaml/compose.deploy.yaml bind-mount
+ * design-system/tokens.css straight into this theme's resources/css/ directory, so this file is
+ * the same one apps/console-web builds from. Anything not overridden below (typography, the form
+ * control's underline-style focus state, spacing not named by #99) is left as keycloak.v2's own
+ * default rather than reproduced here — see keycloak/README.md for the theme's scope.
+ */
+@import url("tokens.css");
+
+:root {
+  /* Patternfly's own theme-color hook (light-mode value only — darkMode=false in
+     theme.properties means the dark-scoped variant of this variable is never read). */
+  --pf-v5-global--primary-color--100: var(--color-brand-primary);
+  --pf-v5-global--primary-color--200: var(--color-brand-primary);
+
+  /* keycloak.v2 styles.css's own hook for the card's top accent border. */
+  --keycloak-card-top-color: var(--color-brand-primary);
+
+  /* The transparent-white logo mark has no colored/dark variant (design-system/DESIGN.md), so it
+     always needs a dark backing chip — not itself a design-system token (same convention as
+     apps/console-web/src/styles/tokens.css's own --chip), just the literal color that file uses. */
+  --erria-chip: #0f172a;
+}
+
+/* keycloak.v2 paints a subtle SVG texture behind the whole page (--keycloak-bg-logo-url); Erria's
+   design system has no equivalent, so this reverts to a flat surface color instead of carrying
+   Keycloak's own stock backdrop. */
+.login-pf body {
+  background: var(--color-surface);
+}
+
+.pf-v5-c-login__main {
+  border-radius: var(--radius-4);
+  /* Without this, the header's square-cornered top accent border (border-top, styles.css) pokes
+     out past the rounded corners set above instead of being clipped to match them. */
+  overflow: hidden;
+}
+
+.pf-v5-c-form-control {
+  border-radius: var(--radius-3);
+}
+
+/* --- Header logo chip (template.ftl's #kc-header-wrapper override) --- */
+
+/* #kc-header-wrapper (styles.css, keycloak.v2) sets font-size/text-transform/color/text-align for
+   the realm-name text this theme no longer renders there — reset rather than let those inherit
+   into .erria-wordmark below. */
+#kc-header-wrapper {
+  font-size: inherit;
+  text-transform: none;
+  color: inherit;
+  text-align: center;
+}
+
+.erria-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.erria-logo-chip {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  background: var(--erria-chip);
+  border-radius: var(--radius-5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}
+
+.erria-logo-chip img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.erria-wordmark {
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: none;
+  color: var(--color-text-primary);
+}

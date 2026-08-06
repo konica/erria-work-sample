@@ -72,6 +72,44 @@ print(json.dumps(json.loads(base64.b64decode(payload)), indent=2))
 none of the hardening in #59 (blocking the admin console, MFA, rate limiting) applies here, and
 none of it should — that ticket only hardens the deployed realm.
 
+## Login theme (`themes/erria`)
+
+Both realms set `loginTheme: erria` (#99), a custom theme covering only the login screen —
+`accountTheme`/`adminTheme` stay unset (default), since only the OIDC login/logout flow from #76
+needed restyling. RP-initiated logout already suppresses Keycloak's own logout-confirmation screen
+(`post.logout.redirect.uris` above, #76's whole point), so there's no second screen to theme.
+
+The theme extends `keycloak.v2` (the shipped default as of Keycloak 26) rather than the legacy
+`base`/`keycloak` themes, and overrides only two things:
+
+- `template.ftl` — a copy of `keycloak.v2/login/template.ftl` with the realm-name header text
+  swapped for the logo-chip treatment `design-system/DESIGN.md` prescribes (the logo is a
+  transparent-white mark, so it always needs a dark backing chip), and the favicon link pointed at
+  Erria's own icon. Re-copy this file from a newer Keycloak image, re-applying the same two edits,
+  if the login flow ever needs to track a Keycloak version with a different default template.
+- `resources/css/login.css` — brand-primary color, spacing, and radius layered on top of
+  `keycloak.v2`'s Patternfly v5 CSS variables, plus the logo-chip/wordmark styles the template
+  override needs. `darkMode=false` in `theme.properties` turns off `keycloak.v2`'s own
+  OS-`prefers-color-scheme` dark palette — the login page has no app-level theme state to key off,
+  so this keeps it light-only rather than half-supporting a dark variant no token defines.
+
+`login.css`'s first line is `@import url("tokens.css")` — that file is **not** a copy.
+`compose.yaml`/`compose.deploy.yaml` bind-mount `design-system/tokens.css` straight onto
+`themes/erria/login/resources/css/tokens.css`, so the theme always builds from the same file
+`apps/console-web` does; there is no second, hand-maintained set of token values to drift from it.
+Every other theme file (`theme.properties`, `template.ftl`, `login.css`, the two `img/*.png`
+assets) is mounted individually too, rather than bind-mounting the whole `themes/erria` directory
+as one unit — nesting a single-file mount inside a separately-sourced `:ro` directory mount at the
+same path was tried first and proved unreliable on this stack's virtiofs-backed host (the directory
+mount would intermittently win, silently serving whatever placeholder sat at that path on disk
+instead of the file mounted over it). Per-file mounts sidestep that: each is a plain top-level bind
+with no other mount nested inside it, the same pattern this file's `realm-export.json` and
+`dev-entrypoint.sh` mounts already use above.
+
+To see it: `pnpm compose:up`, then open the Keycloak login URL console-web's OIDC redirect would
+use (`http://localhost:8080/realms/erria/protocol/openid-connect/auth?...`) — the queue UI's own
+"Log in" button drives you there automatically once `console-web` is running.
+
 ## Regenerating this file
 
 Edit `realm-export.json` directly rather than exporting from a running Keycloak's admin console —
