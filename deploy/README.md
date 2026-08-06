@@ -86,6 +86,88 @@ above and the GHCR push (the automatic `GITHUB_TOKEN`, not a stored credential).
 `compose.deploy.yaml` needs — `POSTGRES_PASSWORD`, `ANTHROPIC_API_KEY`, and the rest — stays only
 in the VM's own `.env`, exactly as "Environment variables" below already describes.
 
+Four of the five come straight out of Terraform or off your own disk. `DEPLOY_SSH_KNOWN_HOSTS` is
+the one with a procedure — see below.
+
+### Capturing `DEPLOY_SSH_KNOWN_HOSTS`
+
+The VM generates its own SSH host keys on first boot, so there is no Terraform output for this and
+no way to know the value before the VM is running. It has to be read off the live machine once and
+pinned by hand.
+
+**Step 1 — get the host.** Use the same string you will set as `DEPLOY_SSH_HOST`; this matters, see
+the gotchas below.
+
+```bash
+host="$(terraform -chdir=infra/terraform output -raw public_ip_address)"
+```
+
+**Step 2 — read the key off the VM.**
+
+```bash
+ssh-keyscan "$host"
+```
+
+That prints one line per host-key algorithm (rsa, ecdsa, ed25519). Keep all of them.
+
+If `ssh-keyscan` fails — it returns `Connection closed by remote host` from some networks even when
+plain `ssh` to the same host works, because a proxy or IDS in the path drops its bare probe
+connections — fall back to letting `ssh` itself record the key:
+
+```bash
+ssh -i ~/.ssh/erria-review -o UserKnownHostsFile=/tmp/kh -o StrictHostKeyChecking=accept-new \
+  "$(terraform -chdir=infra/terraform output -raw admin_username)@$host" true
+cat /tmp/kh
+```
+
+Two differences from `ssh-keyscan` output worth knowing. It records only the **one** algorithm the
+session negotiated (ed25519 in practice), which is sufficient — that is what the CI runner will
+negotiate too. And the host field comes out **hashed** (`|1|…`), because `HashKnownHosts` defaults
+on; the key material after it is plaintext, so rebuild the line by hand as
+`<host> ssh-ed25519 AAAA…`.
+
+**Step 3 — verify out-of-band. Do not skip this.** Both methods above trust whatever answers on
+port 22, which is the exact exposure the pinning exists to close (`deploy.yml`'s comment on the
+`known_hosts` step spells this out). A successful key-based login is *not* proof: SSH binds your
+auth signature to the host key, so an impostor could not relay your login on to the real VM, but it
+could still accept your key and impersonate the server to you.
+
+Read the fingerprint off the VM through a channel that is not the network path you are validating —
+**Azure portal → the VM → Serial console**:
+
+```bash
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+Compare it against what you captured:
+
+```bash
+printf '%s\n' "$known_hosts_line" | ssh-keygen -lf -
+```
+
+The `SHA256:…` values must match exactly. If they do not, stop — do not pin the value, and find out
+why before deploying anything.
+
+**Step 4 — set it.**
+
+```bash
+gh variable set DEPLOY_SSH_KNOWN_HOSTS --body "$(ssh-keyscan "$host")"
+```
+
+Only pipe it straight through like that once step 3 has passed; on its own the one-liner is
+convenient trust-on-first-use and buys nothing.
+
+**Gotchas.**
+
+- **`known_hosts` entries are keyed by the host string as written.** Capture against the exact value
+  in `DEPLOY_SSH_HOST`. Scan the IP but set the variable to a DNS name (or vice versa) and every
+  deploy fails host-key verification. Change one, redo the other.
+- **Redo this whenever the VM is recreated.** `terraform destroy` + `apply`, or any rebuild that
+  reprovisions the OS disk, generates fresh host keys. The symptom in CI is
+  `REMOTE HOST IDENTIFICATION HAS CHANGED`.
+- **The key type prefix and the blob are separated by a space** — `ssh-ed25519 AAAA…`. Losing it
+  when copying by hand produces a silently malformed entry.
+
 ## Rolling back
 
 Re-pin `DEPLOY_IMAGE_TAG` to the previous commit SHA and re-run the deploy (re-run
