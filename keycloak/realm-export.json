@@ -1,6 +1,9 @@
 {
   "realm": "erria",
   "enabled": true,
+  "displayName": "Erria Outreach Agent",
+  "displayNameHtml": "Erria Outreach Agent",
+  "loginTheme": "erria",
   "sslRequired": "external",
   "registrationAllowed": false,
   "editUsernameAllowed": false,

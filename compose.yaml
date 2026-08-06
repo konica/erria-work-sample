@@ -51,6 +51,21 @@ services:
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
       - ./keycloak/dev-entrypoint.sh:/opt/keycloak/dev-entrypoint.sh:ro
+      # erria login theme (#99), mounted file-by-file (not as one directory bind) into a path
+      # that doesn't exist in the base image — same single-file-mount convention as the two
+      # entries above. Docker creates each target's parent dirs on demand for a plain file bind;
+      # nesting a file mount inside a *second*, separately-sourced `:ro` directory bind at the
+      # same path was tried first and proved unreliable on this host (a directory bind and a
+      # file bind layered on top of each other under virtiofs), so every file gets its own line.
+      - ./keycloak/themes/erria/login/theme.properties:/opt/keycloak/themes/erria/login/theme.properties:ro
+      - ./keycloak/themes/erria/login/template.ftl:/opt/keycloak/themes/erria/login/template.ftl:ro
+      - ./keycloak/themes/erria/login/resources/css/login.css:/opt/keycloak/themes/erria/login/resources/css/login.css:ro
+      - ./keycloak/themes/erria/login/resources/img/erria-logo.png:/opt/keycloak/themes/erria/login/resources/img/erria-logo.png:ro
+      - ./keycloak/themes/erria/login/resources/img/erria-favicon-192.png:/opt/keycloak/themes/erria/login/resources/img/erria-favicon-192.png:ro
+      # The same design-system/tokens.css apps/console-web builds from — bind-mounted, not
+      # copied, so there is no second hand-maintained copy of token values to drift from it
+      # (#99's own acceptance criteria). login.css imports it directly.
+      - ./design-system/tokens.css:/opt/keycloak/themes/erria/login/resources/css/tokens.css:ro
     healthcheck:
       # The Keycloak image ships bash but no curl/wget, so the health check speaks HTTP over
       # bash's /dev/tcp against the management port (9000, separate from the app port since

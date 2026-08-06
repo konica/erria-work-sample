@@ -101,6 +101,15 @@ services:
       # unresolved literal). deploy/README.md's bring-up sequence renders the template's
       # DEPLOY_ORIGIN_PLACEHOLDER with `sed` into this gitignored path before `up -d`.
       - ./keycloak/realm-export.deploy.json:/opt/keycloak/data/import/realm-export.json:ro
+      # erria login theme (#99) — same per-file mounts as compose.yaml's dev keycloak service
+      # (see the comment there for why each file gets its own line); restated here, not
+      # inherited, because this list is !override.
+      - ./keycloak/themes/erria/login/theme.properties:/opt/keycloak/themes/erria/login/theme.properties:ro
+      - ./keycloak/themes/erria/login/template.ftl:/opt/keycloak/themes/erria/login/template.ftl:ro
+      - ./keycloak/themes/erria/login/resources/css/login.css:/opt/keycloak/themes/erria/login/resources/css/login.css:ro
+      - ./keycloak/themes/erria/login/resources/img/erria-logo.png:/opt/keycloak/themes/erria/login/resources/img/erria-logo.png:ro
+      - ./keycloak/themes/erria/login/resources/img/erria-favicon-192.png:/opt/keycloak/themes/erria/login/resources/img/erria-favicon-192.png:ro
+      - ./design-system/tokens.css:/opt/keycloak/themes/erria/login/resources/css/tokens.css:ro
     depends_on:
       postgres:
         condition: service_healthy
