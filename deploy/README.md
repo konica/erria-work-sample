@@ -143,11 +143,12 @@ crontab deploy/crontab
 ```
 
 See [`crontab`](crontab) for the schedule and why the two jobs are staggered rather than
-simultaneous. Both job bodies are stubs today (`apps/worker/src/jobs/run-job.ts`) — this only
-wires the invocation up; a stub run still exits 0, so
-`docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker --job=followup-cadence`
-succeeding is what "cron entries run both worker jobs successfully" means until the real job
-bodies land.
+simultaneous. `followup-cadence` runs its real body (`apps/worker/src/jobs/followup-cadence.ts`);
+`audit-sample-maintenance` is still a stub (`apps/worker/src/jobs/run-job.ts`) — a stub run still
+exits 0, so `docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker
+--job=audit-sample-maintenance` succeeding is what "the cron entry ran successfully" means until
+that job's real body lands. Each entry chains a heartbeat publish with `&&` — see "Autonomous-send
+alerting" under Monitoring below (issue #62) for what that heartbeat covers and how to verify it.
 
 ## Certificate persistence
 
@@ -427,6 +428,66 @@ for this VM with nothing to enable, at **Azure portal → Monitor → Metrics �
 No Terraform resource is needed for either — this section exists so a human knows where to look,
 which is also this ticket's "visible in the portal" acceptance criterion in full.
 
+### Autonomous-send alerting (issue #62)
+
+§8's target state predates autonomous sending and says nothing about it — this closes that gap
+for this deployment. Six alerts, all routed through `azurerm_monitor_action_group.ops` except the
+spend one (routed to `budget`'s action group, since it's a spend concern for that audience rather
+than an operational one):
+
+- **Scheduled-job silence** — `followup-cadence` and `audit-sample-maintenance` (`deploy/crontab`)
+  each chain `deploy/scripts/report-job-heartbeat.sh "<name>"` with `&&` after the job itself, so a
+  heartbeat only publishes when the job actually completed. `azurerm_monitor_metric_alert.followup_cadence_heartbeat`
+  / `.audit_sample_maintenance_heartbeat` fire when a job's heartbeat metric shows zero data points
+  over the last 24 hours (`aggregation = "Count"`, `operator = "LessThan"`, `threshold = 1`) — the
+  failure mode is silence, not error output, so absence of data is exactly what's being watched
+  for.
+- **Kill-switch flips, in either direction** — `report-autonomous-alerting-metrics.sh` (every 5
+  minutes) publishes `autonomousSendingEnabled` as a 0/1 metric.
+  `azurerm_monitor_metric_alert.autonomous_kill_switch_state` fires (Activated) when it crosses to
+  1 and auto-resolves (Resolved, also notified) when it crosses back to 0 — one rule, both
+  directions, both notifications going to the same two people.
+- **Kill-switch read failure fails closed** — code-level, not an alert:
+  `packages/domain/src/settings/read-settings-fail-closed.ts` wraps every read of the kill switch;
+  a thrown error is logged and treated as "off" (hold for approval), the same posture the switch
+  already takes when it's simply paused. Covered by
+  `packages/domain/src/dispatch/dispatch-message.integration.spec.ts`'s "holds an autonomous
+  message for approval when the kill switch cannot be read" test.
+- **Autonomous send volume anomaly** — a tripwire, not a cap (the design deliberately has no
+  ceiling). `azurerm_monitor_metric_alert.autonomous_send_volume_anomaly` uses Dynamic Thresholds
+  (`dynamic_criteria`, `alert_sensitivity = "Medium"`) against the `Autonomous Sends` metric rather
+  than a fixed number, since there's no sensible fixed number for a metric whose whole point is
+  not having one.
+- **Audit-sample review backlog** — `azurerm_monitor_metric_alert.audit_sample_backlog` fires when
+  the oldest unreviewed `AuditSample` has waited longer than
+  `var.audit_sample_backlog_alert_threshold_hours` (default 48h).
+- **Claude API spend threshold** — `azurerm_monitor_metric_alert.claude_api_spend`, separate from
+  `budget.tf`'s Azure budget alert. The value is an *estimate* from `LlmCall` token counts at list
+  pricing (`apps/worker/src/jobs/report-alerting-metrics.ts`), not the vendor's invoice — nothing
+  in this codebase calls an Anthropic billing API.
+- **Telemetry tagging** — `dispatch-message.ts`'s sandbox-dispatch log line carries `tier=autonomous`
+  or `tier=human_approved`, the same `decidedBy` discriminator every metric above filters on, so
+  `docker compose logs worker | grep 'tier=autonomous'` isolates autonomous-tier activity directly.
+
+**Verify the heartbeat mechanism** by disabling a job (the acceptance criterion is explicit about
+this):
+
+```bash
+# Temporarily comment out the followup-cadence line in the installed crontab (crontab -e), or
+# rename the worker's --job flag so it doesn't match, then wait a day and confirm:
+#   - no new line in /var/log/erria/followup-cadence-heartbeat.log
+#   - the "Followup Cadence Heartbeat" metric (Monitor → Metrics, namespace "erria/host") shows
+#     no new data point
+#   - azurerm_monitor_metric_alert.followup_cadence_heartbeat fires and both team members get an
+#     email
+# then restore the crontab entry.
+```
+
+**Verify the kill-switch alert fires in both directions**, from the Settings screen or via
+`SettingsService`: pause autonomous sending (immediate, no confirmation) and confirm an
+"Activated" email arrives within 5 minutes; resume it (confirmation step) and confirm a "Resolved"
+email arrives within another 5 minutes.
+
 ### Where do I look when it breaks
 
 One page, meant to be read top to bottom during an actual incident:
@@ -446,10 +507,15 @@ One page, meant to be read top to bottom during an actual incident:
    against the per-service `mem_limit`s in `compose.deploy.yaml`; Keycloak's JVM start is the
    single biggest and most credit-hungry moment on the box.
 5. **A scheduled job silently stopped running** — `/var/log/erria/*.log` on the VM (cron redirects
-   every job's output there, per `deploy/crontab`); an empty or stale-dated file is the tell. (Full
-   heartbeat-absence alerting on the two application jobs is issue #62, not this one — this ticket
-   only covers the box itself.)
-6. **Nothing above explains it** — `docker compose -f compose.yaml -f compose.deploy.yaml logs
+   every job's output there, per `deploy/crontab`); an empty or stale-dated file is the tell. Since
+   issue #62, the heartbeat-absence alerts (see "Autonomous-send alerting" above) catch this
+   independently of anyone reading logs — check whether `followup_cadence_heartbeat` or
+   `audit_sample_maintenance_heartbeat` actually fired before assuming nobody noticed.
+6. **Autonomous-send alert fired** (kill-switch flip, volume anomaly, audit backlog, or Claude
+   spend) — see "Autonomous-send alerting" above for what each one watches; `docker compose ...
+   logs worker | grep 'tier=autonomous'` isolates the autonomous-tier activity the alert is about
+   from human-approved sends in the same log stream.
+7. **Nothing above explains it** — `docker compose -f compose.yaml -f compose.deploy.yaml logs
    --since 1h` across every service, then work backwards from whichever timestamp lines up with
    when the alert fired.
 

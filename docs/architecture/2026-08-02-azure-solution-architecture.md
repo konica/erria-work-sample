@@ -10,8 +10,9 @@ destination for when the MVP outgrows one box; ADR-0007 lists the triggers to co
 containers at active rates and overstates the total by roughly 2×, and §3/§7 omit two choices that are
 **permanent at Postgres server creation** (networking mode, geo-redundant backup). Both are detailed,
 with rates verified against the Azure retail price API, in §13 of the MVP deployment design. §8's alert
-list also predates [ADR-0006](../adr/0006-autonomous-send-designed-deferrals-lifted.md) and covers
-autonomous sending nowhere.
+list originally predated [ADR-0006](../adr/0006-autonomous-send-designed-deferrals-lifted.md) and
+covered autonomous sending nowhere; issue #62 closed that gap — see §8's own "Autonomous-send
+alerting" bullet.
 
 Last updated: 2026-08-04 (status and corrections; body otherwise as written 2026-08-02)
 Scope grounding: [`docs/superpowers/specs/2026-08-01-outreach-agent-design.md`](../superpowers/specs/2026-08-01-outreach-agent-design.md),
@@ -325,6 +326,33 @@ Sized for a two-person team checking in periodically, not a 24/7 SRE function.
   - **Azure Cost Management budget alert** — given a two-person team is watching a new,
     unfamiliar recurring cost line (Claude API usage plus Azure infra), a monthly budget threshold
     alert is more valuable here than most infra alerts.
+  - **Autonomous-send alerting (issue #62)** — this list originally said nothing about autonomous
+    sending because it predates [ADR-0006](../adr/0006-autonomous-send-designed-deferrals-lifted.md);
+    every rule below assumed a human was looking at each outbound message. Now that Tier 1 sends
+    without one, the same six gaps this section already has a fix for on the one-VM MVP deployment
+    (ADR-0007) apply here too, expressed through this design's own primitives instead of a
+    managed-identity custom metric:
+    - **Scheduled-job silence** — Container Apps Jobs' own execution history (a job that stops
+      being invoked shows zero recent executions) is the managed equivalent of the MVP's
+      heartbeat-absence metric; alert on it the same way, not on job error output, since the
+      failure mode is silence.
+    - **Kill-switch flips, in either direction** — an Application Insights custom event emitted
+      wherever `autonomousSendingEnabled` changes, with an alert rule on event count > 0 in either
+      direction over a short window, notifying both team members either way.
+    - **Kill-switch read failure fails closed** — an application-code invariant, not an
+      infrastructure concern; carries over unchanged regardless of hosting platform.
+    - **Autonomous send volume anomaly** — Azure Monitor's Dynamic Thresholds applied to a custom
+      metric or Application Insights metric for autonomous-tier send count, the same mechanism
+      already used for Postgres/API alerting above, just with a dynamic rather than static
+      threshold, since the design has no fixed ceiling to alert against.
+    - **Audit-sample review backlog** — a scheduled query against Application Insights or the
+      database (oldest unreviewed `AuditSample` age) feeding an alert rule.
+    - **Claude API spend threshold** — separate from the Azure Cost Management budget alert above;
+      a different vendor, and per the ticket likely the larger number.
+    - **Telemetry tagging** — every trace, log, and metric touching a send should carry a
+      `tier: autonomous | human_approved` dimension (or equivalent Application Insights custom
+      property) so the alerts above can be scoped to autonomous-tier activity specifically,
+      distinct from human-approved activity in the same telemetry stream.
 - **Business-level visibility** (tier distribution, escalation volumes, audit-sample pass/fail
   rates called for in the behavior spec's §8/§10) is better served by a simple in-app reporting
   view backed by normal database queries than by infrastructure monitoring tooling — this is an

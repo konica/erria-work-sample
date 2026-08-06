@@ -254,6 +254,29 @@ describe('dispatchMessage', () => {
     expect(refreshed.sentAt).toBeNull();
   });
 
+  it('holds an autonomous message for approval when the kill switch cannot be read (issue #62 — fail closed)', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await testDb.prisma.setting.upsert({
+      where: { id: 1 },
+      update: { autonomousSendingEnabled: true },
+      create: { id: 1, autonomousSendingEnabled: true },
+    });
+    const { message } = await createApprovedMessage();
+    await testDb.prisma.message.update({
+      where: { id: message.id },
+      data: { tierContext: 1, decidedBy: 'system (autonomous)' },
+    });
+    vi.spyOn(testDb.prisma.setting, 'findUnique').mockRejectedValueOnce(new Error('connection reset'));
+
+    const result = await dispatchMessage('sandbox', { messageId: message.id }, { prisma: testDb.prisma });
+
+    expect(result).toEqual({ messageId: message.id, status: 'refused', reason: 'autonomous_sending_paused' });
+    const refreshed = await testDb.prisma.message.findUniqueOrThrow({ where: { id: message.id } });
+    expect(refreshed.status).toBe('approved');
+    expect(refreshed.sentAt).toBeNull();
+    consoleErrorSpy.mockRestore();
+  });
+
   it('still dispatches a human-approved message while autonomous sending is paused', async () => {
     await testDb.prisma.setting.upsert({
       where: { id: 1 },

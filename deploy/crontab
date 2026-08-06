@@ -13,8 +13,11 @@
 # apps/worker/src/jobs/run-job.ts), so there is no cadence-sensitive behaviour yet to tune
 # this against. Revisit once #40/Plans 2-3 land the real job bodies.
 SHELL=/bin/sh
-0 6 * * * cd /opt/erria && docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker --job=followup-cadence >> /var/log/erria/followup-cadence.log 2>&1
-5 6 * * * cd /opt/erria && docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker --job=audit-sample-maintenance >> /var/log/erria/audit-sample-maintenance.log 2>&1
+# `&&`, not `;` — a job that exits non-zero (main.ts's catch-all sets that on any thrown error)
+# must not publish a completion heartbeat. The heartbeat is a presence signal for "this job
+# finished," not a magnitude for "this job succeeded some other way" — issue #62's alerting gaps.
+0 6 * * * cd /opt/erria && docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker --job=followup-cadence >> /var/log/erria/followup-cadence.log 2>&1 && deploy/scripts/report-job-heartbeat.sh "Followup Cadence Heartbeat" >> /var/log/erria/followup-cadence-heartbeat.log 2>&1
+5 6 * * * cd /opt/erria && docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker --job=audit-sample-maintenance >> /var/log/erria/audit-sample-maintenance.log 2>&1 && deploy/scripts/report-job-heartbeat.sh "Audit Sample Maintenance Heartbeat" >> /var/log/erria/audit-sample-maintenance-heartbeat.log 2>&1
 
 # Monitoring (issue #61) — both scripts publish a custom Azure Monitor metric via the VM's own
 # managed identity (deploy/scripts/lib-azure-metric.sh); infra/terraform/monitoring.tf alerts on
@@ -24,3 +27,11 @@ SHELL=/bin/sh
 # other two jobs above don't (docker compose reads .env itself; a plain script does not).
 */5 * * * * /opt/erria/deploy/scripts/report-disk-usage.sh >> /var/log/erria/disk-usage.log 2>&1
 17 3 * * * . /opt/erria/.env && /opt/erria/deploy/scripts/report-tls-expiry.sh >> /var/log/erria/tls-expiry.log 2>&1
+
+# Autonomous-send alerting (issue #62) — kill-switch state (so a flip can be alerted on),
+# autonomous send volume (the anomaly tripwire), audit-sample review backlog, and estimated Claude
+# API spend. Every 5 minutes, matching disk usage above: the kill switch and send volume are the
+# fastest-moving of the four, and running all four together costs one extra `docker compose run`
+# per tick, not four. See deploy/scripts/report-autonomous-alerting-metrics.sh for why this one
+# needs the worker container (a database query) rather than a plain host script.
+*/5 * * * * cd /opt/erria && deploy/scripts/report-autonomous-alerting-metrics.sh >> /var/log/erria/autonomous-alerting-metrics.log 2>&1

@@ -3,6 +3,7 @@ import type { DispatchMode } from './dispatch-mode.js';
 import { buildSubjectLine } from './subject-line.js';
 import { recordCleanApproval } from '../tiering/record-clean-approval.js';
 import { NotImplementedFlowError } from '../errors.js';
+import { readSettingsFailClosed } from '../settings/read-settings-fail-closed.js';
 
 export interface DispatchMessageInput {
   messageId: string;
@@ -61,7 +62,7 @@ export async function dispatchMessage(
   // here so a pause also stops a message already in flight, but a message a human explicitly
   // approved is still theirs to send and must not be stranded by it.
   if (message.decidedBy === 'system (autonomous)') {
-    const settings = await deps.prisma.setting.findUnique({ where: { id: 1 } });
+    const settings = await readSettingsFailClosed(deps.prisma);
     if (!settings?.autonomousSendingEnabled) {
       return { messageId: message.id, status: 'refused', reason: 'autonomous_sending_paused' };
     }
@@ -89,7 +90,11 @@ export async function dispatchMessage(
 
   // No real mail provider (a stated non-goal) — `sandbox` renders what would have been sent and
   // calls nothing external, while performing the exact same persistence a real send would.
-  console.log(`[dispatch:sandbox] to=${recipient} subject=${JSON.stringify(subject)}`);
+  // `tier` (issue #62) is the same decidedBy discriminator the alerting job filters on, restated
+  // here so autonomous-tier activity is isolable straight from `docker compose logs` without a
+  // join back to the database.
+  const tier = message.decidedBy === 'system (autonomous)' ? 'autonomous' : 'human_approved';
+  console.log(`[dispatch:sandbox] tier=${tier} to=${recipient} subject=${JSON.stringify(subject)}`);
 
   // Only an agent draft's role changes on send — a human-authored reply is already correctly
   // labeled and must stay that way, or its permanent record misattributes who wrote it.
