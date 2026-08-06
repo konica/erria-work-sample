@@ -17,3 +17,7 @@ packages/*/src/generated/
 # Rendered from keycloak/realm-export.deploy.json.template at deploy time (issue #57) — the
 # committed template has no hostname; the rendered file has the real deploy domain baked in.
 /keycloak/realm-export.deploy.json
+
+# Screenshots dropped here during manual setup/debugging steps (e.g. the DuckDNS registration
+# confirmation for #56) routinely contain live tokens/credentials in-frame — never committed.
+bugs/screensheets/

@@ -19,7 +19,7 @@ const detail = {
   pendingMessage: { id: 'msg_1', body: 'Hi Ms. Pham, ...', edited: false, tierContext: 2 },
 };
 
-function mockFetch(overrides: Record<string, unknown> = {}) {
+function mockFetch(overrides: Record<string, unknown> = {}, activeEscalations: unknown[] = []) {
   return vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST' && url.endsWith('/approve')) {
       return { ok: true, json: async () => ({ message: { id: 'msg_1', status: 'approved' } }) };
@@ -32,6 +32,12 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
         ok: true,
         json: async () => ({ message: { id: 'msg_1', body: 'Edited text', edited: true } }),
       };
+    }
+    if (url.startsWith('/api/escalations')) {
+      return { ok: true, json: async () => ({ items: activeEscalations }) };
+    }
+    if (url.includes('/resolutions')) {
+      return { ok: true, json: async () => ({ items: [] }) };
     }
     return { ok: true, json: async () => ({ ...detail, ...overrides }) };
   });
@@ -103,6 +109,40 @@ describe('AccountDetailPage', () => {
     await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument();
     expect(screen.getByText(/nothing awaiting review/i)).toBeInTheDocument();
+  });
+
+  it('renders the escalation panel instead of draft review when an escalation is active', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch({}, [
+        {
+          id: 'esc_1',
+          accountId: 'acc_1',
+          company: 'Song Hong Shipping',
+          rule: 'pricing_question',
+          reasonSummary: 'Buyer asked about pricing or commercial terms',
+          recommendedNextStep: 'Hand to an AE for an indicative quote.',
+          status: 'active',
+          repeatOfResolutionId: null,
+          createdAt: '2026-08-01T00:00:00.000Z',
+        },
+      ]),
+    );
+
+    render(<AccountDetailPage accountId="acc_1" onBack={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText('Active escalation')).toBeInTheDocument());
+    expect(screen.getByText(/buyer asked about pricing/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument();
+  });
+
+  it('opens the change-tier panel from the tier badge row', async () => {
+    render(<AccountDetailPage accountId="acc_1" onBack={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /change tier/i }));
+
+    expect(screen.getByText(/change tier manually/i)).toBeInTheDocument();
   });
 
   it('calls onBack when the back button is clicked', async () => {

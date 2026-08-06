@@ -57,8 +57,14 @@ services:
     # compose.yaml's `keycloak` publishes ${KEYCLOAK_PORT:-8080}:8080 for local dev — Compose
     # concatenates list fields across files by default (same reasoning as postgres's `ports`
     # above), so without !override that mapping would leak straight through to a public
-    # deployment. Caddy (deploy/Caddyfile) is the only path to Keycloak here.
-    ports: !override []
+    # deployment. This binds to the VM's own loopback interface instead of the internet-facing
+    # one (`127.0.0.1:`, not `0.0.0.0:` or a bare port) — reachable only via an SSH tunnel
+    # (`ssh -L 8080:127.0.0.1:8080 <vm-user>@<vm-host>`, then browse
+    # http://localhost:8080/auth/admin from the operator's own machine), never via the internet.
+    # Caddy (deploy/Caddyfile) blocks /auth/admin* at the edge as a second, independent layer —
+    # neither layer relies on the other; either alone would already stop an internet-facing
+    # admin console.
+    ports: !override ['127.0.0.1:8080:8080']
     restart: unless-stopped
     # Budget: ~800 MB (issue #57) — JVM heap capped at 512m below, plus JVM/Quarkus overhead on
     # top of the heap. 1024m gives that overhead room without letting one leak threaten the box.
@@ -129,7 +135,7 @@ services:
       # Built from the same POSTGRES_* values as the `postgres` service above, rather than
       # repeated as a second literal, so the two cannot disagree the way .env.example warns
       # dev's DATABASE_URL and compose.yaml's Postgres credentials can.
-      DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — unlike dev's compose.yaml, a deployed Postgres password has no safe default}@postgres:5432/${POSTGRES_DB:-erria_dev}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — unlike dev's compose.yaml, a deployed Postgres password has no safe default}@postgres:5432/${POSTGRES_DB:-erria}
       CONSOLE_API_PORT: '3000'
       WORKER_INTERNAL_URL: http://worker:3100
       # NOT the internal http://keycloak:8080 address: JwtVerifierService (#77) builds the
@@ -166,7 +172,7 @@ services:
     # Budget: ~200 MB (issue #57).
     mem_limit: 320m
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — unlike dev's compose.yaml, a deployed Postgres password has no safe default}@postgres:5432/${POSTGRES_DB:-erria_dev}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — unlike dev's compose.yaml, a deployed Postgres password has no safe default}@postgres:5432/${POSTGRES_DB:-erria}
       WORKER_PORT: '3100'
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       MESSAGE_DISPATCH_MODE: ${MESSAGE_DISPATCH_MODE:-sandbox}
@@ -185,7 +191,15 @@ services:
       start_period: 15s
 
   caddy:
-    image: caddy:2.9-alpine
+    # Built, not pulled (issue #59): stock caddy:2.9-alpine has no rate-limiting handler, and
+    # deploy/Caddyfile's `rate_limit` directive on the Keycloak token endpoint needs
+    # github.com/mholt/caddy-ratelimit compiled in — see deploy/Caddy.Dockerfile. Built locally
+    # on the VM at deploy time (`docker compose ... build caddy`, deploy/README.md), the same
+    # way the migration image already is; this isn't one of the two images issue #58's publish
+    # workflow pushes to GHCR.
+    build:
+      context: .
+      dockerfile: deploy/Caddy.Dockerfile
     restart: unless-stopped
     # Issue #57 budgets ~20 MB, but measured steady-state with automatic HTTPS actually active
     # (TLS termination, OCSP stapling, the certificate management goroutines) came in around

@@ -309,6 +309,14 @@ memory recording, cron installation) and
 [ADR-0007](docs/adr/0007-mvp-deploys-to-one-vm-with-docker-compose.md) /
 [the deployment design doc](docs/superpowers/specs/2026-08-04-mvp-deployment-design.md) for why.
 
+Merging to `main` runs this automatically:
+[`publish.yml`](.github/workflows/publish.yml) builds and pushes `console-api`/`worker` to GHCR
+tagged with the commit SHA (never `latest`), then [`deploy.yml`](.github/workflows/deploy.yml)
+SSHes to the VM and runs [`deploy/deploy.sh`](deploy/deploy.sh) — pull, migrate (aborting before
+`up -d` if the migration fails, per [ADR-0008](docs/adr/0008-migrations-must-be-expand-contract.md)),
+`up -d`, then a health check of the public URL. See [`deploy/README.md`](deploy/README.md#ci-driven-deploy-issue-58)
+for the repo variables this needs and the honest rollback story.
+
 ## Seed data & CSV import
 
 The trigger-detection/ICP-scoring pipeline is out of scope (see [Status](#status)), so there is no

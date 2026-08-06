@@ -1,0 +1,71 @@
+name: Deploy
+
+# Runs after publish.yml succeeds on main: SSHes to the review VM and runs the pull → migrate →
+# up -d → health-check sequence (deploy/deploy.sh), pinned to the exact commit SHA publish.yml
+# just pushed to GHCR. `workflow_run` + the conclusion check below means a failed build/test on
+# main never reaches the VM — only a commit whose images actually landed in GHCR does.
+#
+# GitHub Actions holds exactly two credentials for this whole pipeline (deployment design §7):
+# the SSH deploy key below, and the GHCR push in publish.yml (the automatic, no-secret
+# GITHUB_TOKEN). Every application secret — Postgres password, Keycloak admin password, the
+# Anthropic API key — lives only in the VM's own .env (deploy/README.md) and is never seen here.
+#
+# Repo variables this workflow reads (Settings → Secrets and variables → Actions → Variables),
+# set by hand once the VM exists (#56) — see deploy/README.md's "CI-driven deploy" section:
+#   DEPLOY_SSH_HOST          the VM's static public IP or hostname
+#   DEPLOY_SSH_USER          the deploy user (terraform's admin_username, "deploy")
+#   DEPLOY_SSH_KNOWN_HOSTS   `ssh-keyscan <host>` output, captured once by a human
+#   DEPLOY_PATH              the repo checkout path on the VM, e.g. /opt/erria
+# and one secret:
+#   DEPLOY_SSH_KEY           private half of the deploy SSH key
+
+on:
+  workflow_run:
+    workflows: [Publish]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ vars.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Pinned by hand once, from the provisioning ticket's own `ssh-keyscan` output — not
+          # accepted on first connect here. A CI runner has no independent way to verify a host
+          # key on first contact, and trusting whatever the network hands back at that moment is
+          # exactly the MITM exposure host-key checking exists to prevent.
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy ${{ github.event.workflow_run.head_sha }}
+        env:
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" bash -s -- "$DEPLOY_SHA" "$DEPLOY_PATH" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          path="$2"
+          cd "$path"
+          git fetch origin
+          git checkout "$sha"
+          set -a
+          . ./.env
+          set +a
+          export DEPLOY_IMAGE_TAG="$sha"
+          bash deploy/deploy.sh
+          REMOTE
