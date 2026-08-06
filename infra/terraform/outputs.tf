@@ -7,6 +7,11 @@ output "resource_group_name" {
   value = azurerm_resource_group.review.name
 }
 
+output "admin_username" {
+  description = "The VM's deploy user (var.admin_username) — feed this to ticket #58's deploy workflow as DEPLOY_SSH_USER."
+  value       = azurerm_linux_virtual_machine.review.admin_username
+}
+
 output "vm_name" {
   value = azurerm_linux_virtual_machine.review.name
 }

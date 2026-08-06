@@ -41,6 +41,28 @@ instead of manual portal clicking. `terraform apply` and `terraform destroy` are
 locally, by a human, with their own `az login`, indefinitely — not from CI. See
 "CI's role" below for what *is* automated.
 
+## Quickstart
+
+`../scripts/quickstart.sh` walks the "One-time setup" and "Day to day" sections below in one
+run: it checks `az login`, registers the resource providers, bootstraps and wires up the
+Terraform state backend, stops for you to fill in `terraform.tfvars` on a first run, exports
+`TF_VAR_admin_ssh_public_key`, runs `terraform plan`, and pauses for an explicit "apply this
+plan?" confirmation before ever running `terraform apply` — it never applies on its own. After a
+successful apply it prints a ready-to-paste block of `deploy.yml`'s repo variables
+(`DEPLOY_SSH_HOST`, `DEPLOY_SSH_USER`, `DEPLOY_PATH`) plus the `ssh-keyscan` command for
+`DEPLOY_SSH_KNOWN_HOSTS`, and names `DEPLOY_SSH_KEY` as the one secret it can't produce (the
+private key is never printed to a terminal) — see deploy/README.md's "CI-driven deploy" section
+for where those go.
+
+```
+az login
+../scripts/quickstart.sh   # optional arg: path to your SSH public key, default ~/.ssh/erria-review.pub
+```
+
+Run it again after filling in `terraform.tfvars` to continue to `terraform plan`/`apply`. The
+manual step-by-step version below is the same sequence, spelled out, for anyone who wants to run
+it — or any individual step — by hand instead.
+
 ## One-time setup
 
 1. `az login` (once per machine/session).
