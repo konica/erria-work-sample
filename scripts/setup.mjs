@@ -55,6 +55,81 @@ export function isBrokenInstall(nodeModulesPath) {
   return !hasBin || !hasModulesYaml;
 }
 
+/**
+ * True when a workspace package's build output is missing — e.g.
+ * `packages/db/dist/index.js`. `dev` is `tsx watch`, which runs an app's own
+ * source but never builds its workspace deps, so a skipped or stale `pnpm
+ * build` surfaces as `ERR_MODULE_NOT_FOUND` deep in a child process instead
+ * of here.
+ */
+export function isDistMissing(distEntryPath) {
+  return !existsSync(distEntryPath);
+}
+
+/**
+ * Scan `docker ps` output for a container already publishing `port`, and
+ * report whether it belongs to this repo's own compose project (`erria`,
+ * pinned in `compose.yaml`) — safe to reuse — or is an unrelated leftover
+ * that would make Compose fail with "port is already allocated".
+ *
+ * Expects one container per line, formatted as `name|composeProject|ports`
+ * (see the `docker ps --format` call in `startPostgres`).
+ */
+export function findPortConflict(psOutput, port, ownProject = 'erria') {
+  const marker = `:${port}->`;
+  for (const raw of psOutput.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const [name, project, ports = ''] = line.split('|');
+    if (ports.includes(marker)) return { name, reusable: project === ownProject };
+  }
+  return null;
+}
+
+/**
+ * Extract the migration name from `prisma migrate status` output when it
+ * reports a failed migration, e.g.:
+ *
+ *   Following migration have failed:
+ *   20260803052443_init
+ *
+ * Returns null for clean output (nothing to resolve).
+ */
+export function parseFailedMigrationName(statusOutput) {
+  const lines = statusOutput.split(/\r?\n/);
+  const markerIndex = lines.findIndex((line) => /migrations? have failed/i.test(line));
+  if (markerIndex === -1) return null;
+  for (let i = markerIndex + 1; i < lines.length; i++) {
+    const name = lines[i].trim();
+    if (name) return name;
+  }
+  return null;
+}
+
+/** Every table name a migration's SQL creates, in the order they appear. */
+export function extractCreatedTables(migrationSql) {
+  const tables = [];
+  const re = /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?"([^"]+)"/gi;
+  let match;
+  while ((match = re.exec(migrationSql))) tables.push(match[1]);
+  return tables;
+}
+
+/**
+ * True when every table a failed migration's SQL would have created already
+ * exists in the database — the signature of an aborted `migrate deploy` that
+ * completed its DDL before the bookkeeping row was marked failed, safe to
+ * resolve with `prisma migrate resolve --applied`. False (not just unproven)
+ * when the migration creates no tables at all — nothing here confirms an
+ * `ALTER TYPE`/`ALTER TABLE`-only migration actually completed, so that case
+ * is left to the raw Prisma error instead of a false "safe" signal.
+ */
+export function tablesSatisfied(createdTables, existingTables) {
+  if (createdTables.length === 0) return false;
+  const existing = new Set(existingTables);
+  return createdTables.every((table) => existing.has(table));
+}
+
 // ---------------------------------------------------------------------------
 // Console output
 // ---------------------------------------------------------------------------
@@ -102,6 +177,19 @@ function probe(cmd, args) {
     const child = spawn(file, fileArgs, { cwd: ROOT, stdio: 'ignore' });
     child.on('error', () => resolve(-1));
     child.on('close', (code) => resolve(code ?? -1));
+  });
+}
+
+/** Run a command, resolving to its combined stdout+stderr text. Never rejects. */
+function captureOutput(cmd, args) {
+  const [file, fileArgs] = platformCommand(cmd, args);
+  return new Promise((resolve) => {
+    const child = spawn(file, fileArgs, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
+    child.stdout.on('data', (chunk) => (output += chunk));
+    child.stderr.on('data', (chunk) => (output += chunk));
+    child.on('error', () => resolve(output));
+    child.on('close', () => resolve(output));
   });
 }
 
@@ -168,6 +256,82 @@ async function install() {
   await run('pnpm', ['install']);
 }
 
+function readPostgresPort() {
+  const envPath = join(ROOT, '.env');
+  if (!existsSync(envPath)) return '5432';
+  return parseEnvFile(readFileSync(envPath, 'utf8')).POSTGRES_PORT || '5432';
+}
+
+async function checkPortConflict() {
+  const port = readPostgresPort();
+  const psOutput = await captureOutput('docker', [
+    'ps',
+    '-a',
+    '--format',
+    '{{.Names}}|{{.Label "com.docker.compose.project"}}|{{.Ports}}',
+  ]);
+  const conflict = findPortConflict(psOutput, port);
+  if (!conflict) return;
+  if (conflict.reusable) {
+    info(`Port ${port} is already held by this repo's own \`${conflict.name}\` container — reusing it.`);
+    return;
+  }
+  fail(
+    `Port ${port} is already bound by "${conflict.name}", which is not part of this repo's \`erria\` ` +
+      `compose project. Inspect it before touching it — it may hold data no seed script can regenerate:\n\n` +
+      `    docker ps -a --format '{{.Names}} {{.Status}} {{.Ports}}'\n` +
+      `    docker exec ${conflict.name} psql -U erria -d erria_dev -tAc \\\n` +
+      `      "select relname, n_live_tup from pg_stat_user_tables order by n_live_tup desc"\n\n` +
+      `Back it up, then remove it and re-run \`pnpm bootstrap\`:\n\n` +
+      `    docker exec ${conflict.name} pg_dump -U erria -d erria_dev > backup.sql\n` +
+      `    docker rm -f ${conflict.name}`,
+  );
+}
+
+/**
+ * `compose:up` failed. Check whether it's the known "aborted migrate deploy
+ * left the bookkeeping row failed, but every table it creates already
+ * exists" case, and if so, print Prisma's documented hotfix instead of the
+ * raw Compose/Prisma error. Re-throws the original error whenever the
+ * evidence doesn't clearly support that diagnosis.
+ */
+async function diagnoseMigrationFailure(error) {
+  const statusOutput = await captureOutput('pnpm', ['--filter', '@erria/db', 'exec', 'prisma', 'migrate', 'status']);
+  const name = parseFailedMigrationName(statusOutput);
+  if (!name) throw error;
+
+  const migrationSqlPath = join(ROOT, 'packages/db/prisma/migrations', name, 'migration.sql');
+  if (!existsSync(migrationSqlPath)) throw error;
+  const createdTables = extractCreatedTables(readFileSync(migrationSqlPath, 'utf8'));
+
+  const tablesOutput = await captureOutput('docker', [
+    'compose',
+    'exec',
+    '-T',
+    'postgres',
+    'psql',
+    '-U',
+    'erria',
+    '-d',
+    'erria_dev',
+    '-tAc',
+    "select table_name from information_schema.tables where table_schema='public'",
+  ]);
+  const existingTables = tablesOutput
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!tablesSatisfied(createdTables, existingTables)) throw error;
+
+  fail(
+    `Migration "${name}" is marked failed, but every table it creates (${createdTables.join(', ')}) already ` +
+      `exists — the DDL completed before the bookkeeping row was marked failed. Resolve it with Prisma's ` +
+      `documented hotfix, then re-run \`pnpm bootstrap\`:\n\n` +
+      `    pnpm --filter @erria/db exec prisma migrate resolve --applied "${name}"`,
+  );
+}
+
 async function startPostgres() {
   if ((await probe('docker', ['info'])) !== 0) {
     const howto = IS_WIN
@@ -175,8 +339,13 @@ async function startPostgres() {
       : 'Start the Docker daemon (Docker Desktop, `sudo systemctl start docker`, or Colima), then re-run `pnpm bootstrap`.';
     fail(`Docker engine is not reachable.\n  ${howto}`);
   }
+  await checkPortConflict();
   info('Docker engine reachable — bringing up Postgres and applying migrations');
-  await run('pnpm', ['compose:up']);
+  try {
+    await run('pnpm', ['compose:up']);
+  } catch (error) {
+    await diagnoseMigrationFailure(error);
+  }
 }
 
 function printReady(willStart) {
@@ -194,6 +363,13 @@ function printReady(willStart) {
 }
 
 async function startApps() {
+  const dbDistEntry = join(ROOT, 'packages/db/dist/index.js');
+  if (isDistMissing(dbDistEntry)) {
+    fail(
+      '`@erria/db` has not been built (packages/db/dist/index.js is missing). ' +
+        'Run `pnpm build`, then re-run `pnpm bootstrap --start`.',
+    );
+  }
   step('Starting apps (Ctrl-C to stop)');
   const envFromFile = existsSync(join(ROOT, '.env'))
     ? parseEnvFile(readFileSync(join(ROOT, '.env'), 'utf8'))
