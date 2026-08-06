@@ -1,6 +1,8 @@
+import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '@erria/db';
 import type { DispatchMode } from '@erria/domain';
 import { reconcileStuckSends } from './reconcile-stuck-sends.js';
+import { runFollowupCadence } from './followup-cadence.js';
 
 const JOB_NAMES = ['followup-cadence', 'audit-sample-maintenance', 'stuck-send-reconciliation'] as const;
 export type JobName = (typeof JOB_NAMES)[number];
@@ -29,7 +31,17 @@ export async function runJob(
     return;
   }
 
-  // followup-cadence and audit-sample-maintenance land in later plans, once the flows they serve
-  // exist. The entrypoint contract is established; the bodies are not written yet.
+  if (name === 'followup-cadence') {
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const result = await runFollowupCadence(prisma, anthropic, deps.dispatchMode);
+    console.log(
+      `[job] followup-cadence: sent ${result.followupsSent}, held ${result.followupsHeld}, ` +
+        `sequences ended ${result.sequencesEnded}`,
+    );
+    return;
+  }
+
+  // audit-sample-maintenance lands in a later plan, once the flow it serves exists. The
+  // entrypoint contract is established; the body is not written yet.
   console.log(`[stub] job "${name}" invoked — no-op until a later plan implements it`);
 }

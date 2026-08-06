@@ -52,3 +52,5 @@ export type {
 } from './autonomous/evaluate-autonomous-send.js';
 export { shouldSampleSend } from './autonomous/should-sample-send.js';
 export type { ShouldSampleInput } from './autonomous/should-sample-send.js';
+export { newFactsSince } from './autonomous/new-facts-since.js';
+export type { Fact } from './autonomous/new-facts-since.js';

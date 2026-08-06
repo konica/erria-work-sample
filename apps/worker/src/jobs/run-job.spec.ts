@@ -6,7 +6,7 @@ describe('runJob', () => {
     await expect(runJob('not-a-real-job')).rejects.toThrow('Unknown job');
   });
 
-  it('resolves for each known job name without throwing', async () => {
-    await expect(runJob('followup-cadence')).resolves.toBeUndefined();
+  it('resolves for a known job name that has no body yet, without throwing', async () => {
+    await expect(runJob('audit-sample-maintenance')).resolves.toBeUndefined();
   });
 });
