@@ -234,6 +234,39 @@ describe('dispatchMessage', () => {
     expect(refreshed.sentAt).toBeNull();
   });
 
+  it('refuses to dispatch an autonomous message once autonomous sending is paused', async () => {
+    await testDb.prisma.setting.upsert({
+      where: { id: 1 },
+      update: { autonomousSendingEnabled: false, autonomousPauseReason: 'paused mid-flight' },
+      create: { id: 1, autonomousSendingEnabled: false, autonomousPauseReason: 'paused mid-flight' },
+    });
+    const { message } = await createApprovedMessage();
+    await testDb.prisma.message.update({
+      where: { id: message.id },
+      data: { tierContext: 1, decidedBy: 'system (autonomous)' },
+    });
+
+    const result = await dispatchMessage('sandbox', { messageId: message.id }, { prisma: testDb.prisma });
+
+    expect(result).toEqual({ messageId: message.id, status: 'refused', reason: 'autonomous_sending_paused' });
+    const refreshed = await testDb.prisma.message.findUniqueOrThrow({ where: { id: message.id } });
+    expect(refreshed.status).toBe('approved');
+    expect(refreshed.sentAt).toBeNull();
+  });
+
+  it('still dispatches a human-approved message while autonomous sending is paused', async () => {
+    await testDb.prisma.setting.upsert({
+      where: { id: 1 },
+      update: { autonomousSendingEnabled: false },
+      create: { id: 1, autonomousSendingEnabled: false },
+    });
+    const { message } = await createApprovedMessage();
+
+    const result = await dispatchMessage('sandbox', { messageId: message.id }, { prisma: testDb.prisma });
+
+    expect(result).toMatchObject({ status: 'sent' });
+  });
+
   it('does not count an edited send toward Clean Approval', async () => {
     const { account, message } = await createApprovedMessage({ edited: true });
 

@@ -39,6 +39,7 @@ export class AccountsService {
             body: pendingMessage.body,
             edited: pendingMessage.edited,
             tierContext: pendingMessage.tierContext,
+            hardRuleFlags: (pendingMessage.hardRuleFlags as string[] | null) ?? null,
           }
         : null,
     };

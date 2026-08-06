@@ -13,6 +13,7 @@ const settings = {
     rolloutOverlayEnabled: true,
     rolloutOverlayDescription: 'Every new account starts at Tier 2 minimum.',
   },
+  autonomous: { enabled: true, pauseReason: null },
 };
 
 describe('SettingsPage', () => {
@@ -28,6 +29,27 @@ describe('SettingsPage', () => {
               diff: [{ field: 'maxFollowups', from: 2, to: 4 }],
               notice: 'These changes apply to outreach going forward.',
             }),
+          };
+        }
+        if (url.endsWith('/autonomous/pause') && init?.method === 'POST') {
+          return {
+            ok: true,
+            json: async () => ({ ...settings, autonomous: { enabled: false, pauseReason: 'Tone drift on three sends' } }),
+          };
+        }
+        if (url.endsWith('/autonomous/resume') && init?.method === 'PUT') {
+          return {
+            ok: true,
+            json: async () => ({
+              requiresConfirmation: true,
+              notice: 'Resuming lets Tier 1 accounts send without a human reading the message first.',
+            }),
+          };
+        }
+        if (url.endsWith('/autonomous/resume/confirm') && init?.method === 'POST') {
+          return {
+            ok: true,
+            json: async () => ({ ...settings, autonomous: { enabled: true, pauseReason: null } }),
           };
         }
         return { ok: true, json: async () => settings };
@@ -131,5 +153,84 @@ describe('SettingsPage', () => {
       expect(fetch).toHaveBeenCalledWith('/api/settings/advanced', expect.objectContaining({ method: 'PUT' })),
     );
     expect(screen.queryByTestId('confirm-advanced')).not.toBeInTheDocument();
+  });
+
+  describe('autonomous kill switch', () => {
+    it('pauses immediately once a reason is given, with no confirmation step', async () => {
+      render(<SettingsPage />);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /pause autonomous sending/i })).toBeInTheDocument(),
+      );
+
+      await userEvent.type(screen.getByLabelText(/why are you pausing/i), 'Tone drift on three sends');
+      await userEvent.click(screen.getByRole('button', { name: /pause autonomous sending/i }));
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith(
+          '/api/settings/autonomous/pause',
+          expect.objectContaining({ method: 'POST' }),
+        ),
+      );
+      await waitFor(() => expect(screen.getByText(/^paused$/i)).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: /^confirm resume$/i })).not.toBeInTheDocument();
+    });
+
+    it('will not pause without a reason', async () => {
+      render(<SettingsPage />);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /pause autonomous sending/i })).toBeInTheDocument(),
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: /pause autonomous sending/i }));
+
+      expect(screen.getByText(/a reason is required/i)).toBeInTheDocument();
+      expect(fetch).not.toHaveBeenCalledWith(
+        '/api/settings/autonomous/pause',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('proposing a resume changes nothing until confirmed', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, init?: RequestInit) => {
+          if (url.endsWith('/autonomous/resume') && init?.method === 'PUT') {
+            return {
+              ok: true,
+              json: async () => ({
+                requiresConfirmation: true,
+                notice: 'Resuming lets Tier 1 accounts send without a human reading the message first.',
+              }),
+            };
+          }
+          if (url.endsWith('/autonomous/resume/confirm') && init?.method === 'POST') {
+            return { ok: true, json: async () => ({ ...settings, autonomous: { enabled: true, pauseReason: null } }) };
+          }
+          return { ok: true, json: async () => ({ ...settings, autonomous: { enabled: false, pauseReason: 'paused' } }) };
+        }),
+      );
+
+      render(<SettingsPage />);
+      await waitFor(() => expect(screen.getByText(/^paused$/i)).toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('button', { name: /resume autonomous sending/i }));
+
+      await waitFor(() =>
+        expect(screen.getByText(/without a human reading the message first/i)).toBeInTheDocument(),
+      );
+      expect(fetch).not.toHaveBeenCalledWith(
+        '/api/settings/autonomous/resume/confirm',
+        expect.objectContaining({ method: 'POST' }),
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: /^confirm resume$/i }));
+
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith(
+          '/api/settings/autonomous/resume/confirm',
+          expect.objectContaining({ method: 'POST' }),
+        ),
+      );
+    });
   });
 });

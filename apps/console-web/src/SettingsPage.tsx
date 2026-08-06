@@ -10,6 +10,9 @@ export function SettingsPage() {
   const [advanced, setAdvanced] = useState<SettingsPayload['advanced'] | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [proposal, setProposal] = useState<AdvancedSettingsProposal | null>(null);
+  const [pauseReason, setPauseReason] = useState('');
+  const [pauseError, setPauseError] = useState(false);
+  const [resumeNotice, setResumeNotice] = useState<string | null>(null);
 
   useEffect(() => {
     api.getSettings().then((data) => {
@@ -21,8 +24,115 @@ export function SettingsPage() {
 
   if (!settings || !basic || !advanced) return <p>Loading settings…</p>;
 
+  async function pauseAutonomous() {
+    if (!pauseReason.trim()) {
+      setPauseError(true);
+      return;
+    }
+    const result = await api.pauseAutonomous(pauseReason.trim());
+    setSettings(result);
+    setPauseReason('');
+  }
+
+  async function proposeResume() {
+    const proposal = await api.proposeResumeAutonomous();
+    setResumeNotice(proposal.notice);
+  }
+
+  async function confirmResume() {
+    const result = await api.confirmResumeAutonomous();
+    setSettings(result);
+    setResumeNotice(null);
+  }
+
   return (
     <div className="settings-wrap">
+      <section className="set-sec">
+        <div className="set-head">
+          <span className="set-badge">
+            <Icon name="robot" />
+            Autonomous sending
+          </span>
+          <span className="set-sub">
+            {settings.autonomous.enabled
+              ? 'Tier 1 accounts are sending without a human reading each message first'
+              : 'Paused — Tier 1 accounts keep their earned tier; their messages queue for approval'}
+          </span>
+        </div>
+
+        {settings.autonomous.enabled ? (
+          <>
+            <p className="divider-note">
+              Pausing takes effect immediately, with no confirmation step, and also stops any
+              autonomous message already in flight.
+            </p>
+            <div className="tp-field">
+              <span className="tp-label">
+                Why are you pausing? <em>(required)</em>
+              </span>
+              <input
+                type="text"
+                className={`tp-reason ${pauseError ? 'err' : ''}`}
+                value={pauseReason}
+                placeholder="e.g. Tone drift spotted on three sends"
+                aria-label="Why are you pausing?"
+                onChange={(event) => {
+                  setPauseReason(event.target.value);
+                  if (event.target.value.trim()) setPauseError(false);
+                }}
+              />
+              {pauseError && (
+                <span className="tp-err">
+                  <Icon name="info" />A reason is required — whoever finds the system paused should
+                  be able to see why without asking.
+                </span>
+              )}
+            </div>
+            <div className="set-save">
+              <button className="btn danger sm" onClick={pauseAutonomous}>
+                <Icon name="x" />
+                Pause autonomous sending
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <span className="badge esc">
+              <Icon name="flag" />
+              Paused
+            </span>
+            {settings.autonomous.pauseReason && (
+              <p className="divider-note">Reason: {settings.autonomous.pauseReason}</p>
+            )}
+            {resumeNotice ? (
+              <div className="confirm-inline" data-testid="confirm-resume-autonomous">
+                <div className="ci-head">
+                  <Icon name="info" />
+                  Confirm before resuming
+                </div>
+                <div className="ci-note">{resumeNotice}</div>
+                <div className="ci-actions">
+                  <button className="btn primary sm" onClick={confirmResume}>
+                    <Icon name="check" />
+                    Confirm resume
+                  </button>
+                  <button className="btn sm" onClick={() => setResumeNotice(null)}>
+                    Cancel — nothing changed
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="set-save">
+                <button className="btn primary sm" onClick={proposeResume}>
+                  <Icon name="check" />
+                  Resume autonomous sending
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
       <section className="set-sec">
         <div className="set-head">
           <span className="set-badge">

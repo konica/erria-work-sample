@@ -51,6 +51,37 @@ describe('AccountsService', () => {
     expect(result?.account.companyName).toBe('Song Hong Shipping');
     expect(result?.vessels).toHaveLength(1);
     expect(result?.pendingMessage?.body).toBe('Hi Ms. Pham, ...');
+    expect(result?.pendingMessage?.hardRuleFlags).toBeNull();
+  });
+
+  it('surfaces the hold reason on a message the autonomous-send gate held for approval', async () => {
+    const account = await testDb.prisma.account.create({
+      data: {
+        companyName: 'Vung Tau Marine',
+        segment: 'Coastal freight',
+        hub: 'Haiphong',
+        icpScore: 90,
+        icpBand: 'high',
+        relationshipSummary: 'Earned Tier 1',
+        currentTier: 1,
+        tierRationale: 'Earned',
+      },
+    });
+    await testDb.prisma.message.create({
+      data: {
+        accountId: account.id,
+        role: 'agent_draft',
+        body: 'Hi, ...',
+        status: 'pending_review',
+        tierContext: 2,
+        hardRuleFlags: ['autonomous_paused_hold'],
+      },
+    });
+
+    const service = new AccountsService(testDb.prisma);
+    const result = await service.getDetail(account.id);
+
+    expect(result?.pendingMessage?.hardRuleFlags).toEqual(['autonomous_paused_hold']);
   });
 
   describe('changeTier', () => {

@@ -16,7 +16,7 @@ const detail = {
   },
   vessels: [{ id: 'v1', name: 'MV Song Hong Pioneer', imo: '9123456', flag: 'Vietnam' }],
   contacts: [{ id: 'c1', name: 'Ms. Lan Pham', role: 'Technical Superintendent', email: 'lan@example.com' }],
-  pendingMessage: { id: 'msg_1', body: 'Hi Ms. Pham, ...', edited: false, tierContext: 2 },
+  pendingMessage: { id: 'msg_1', body: 'Hi Ms. Pham, ...', edited: false, tierContext: 2, hardRuleFlags: null },
 };
 
 function mockFetch(overrides: Record<string, unknown> = {}, activeEscalations: unknown[] = []) {
@@ -100,6 +100,33 @@ describe('AccountDetailPage', () => {
 
     await waitFor(() => expect(screen.getByText('Edited text')).toBeInTheDocument());
     expect(screen.getByText(/edited by a human/i)).toBeInTheDocument();
+  });
+
+  it('explains in plain language which condition held an autonomous message for approval', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch({
+        pendingMessage: {
+          id: 'msg_1',
+          body: 'Hi Ms. Pham, ...',
+          edited: false,
+          tierContext: 2,
+          hardRuleFlags: ['autonomous_paused_hold'],
+        },
+      }),
+    );
+
+    render(<AccountDetailPage accountId="acc_1" onBack={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText(/Hi Ms\. Pham/)).toBeInTheDocument());
+    expect(screen.getByText(/autonomous sending is currently paused/i)).toBeInTheDocument();
+  });
+
+  it('shows no hold explanation when nothing held the message', async () => {
+    render(<AccountDetailPage accountId="acc_1" onBack={() => {}} />);
+
+    await waitFor(() => expect(screen.getByText(/Hi Ms\. Pham/)).toBeInTheDocument());
+    expect(screen.queryByText(/held for approval/i)).not.toBeInTheDocument();
   });
 
   it('shows no review controls when there is no pending draft', async () => {

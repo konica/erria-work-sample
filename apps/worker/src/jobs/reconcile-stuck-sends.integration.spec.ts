@@ -119,4 +119,31 @@ describe('reconcileStuckSends', () => {
     expect(events).toHaveLength(1);
     expect(events[0].reason).toMatch(/could not be sent/i);
   });
+
+  it('flags a stuck autonomous message for human attention when paused mid-flight, without retrying', async () => {
+    const { account, message } = await seedApproved(30);
+    await testDb.prisma.message.update({
+      where: { id: message.id },
+      data: { tierContext: 1, decidedBy: 'system (autonomous)' },
+    });
+    await testDb.prisma.setting.upsert({
+      where: { id: 1 },
+      update: { autonomousSendingEnabled: false },
+      create: { id: 1, autonomousSendingEnabled: false },
+    });
+
+    const result = await reconcileStuckSends(testDb.prisma, 'sandbox', { staleAfterMinutes: 5 });
+
+    expect(result.dispatched).toBe(0);
+    expect(result.flagged).toBe(1);
+
+    const updated = await testDb.prisma.message.findUniqueOrThrow({ where: { id: message.id } });
+    expect(updated.status).toBe('needs_triage');
+
+    const events = await testDb.prisma.tierHistoryEvent.findMany({
+      where: { accountId: account.id, relatedMessageId: message.id },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].reason).toMatch(/paused/i);
+  });
 });

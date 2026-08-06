@@ -8,6 +8,23 @@ import { ChangeTierPanel } from './ChangeTierPanel.js';
 
 type Decision = 'approved' | 'rejected' | null;
 
+/**
+ * Mirrors the `HoldReason` values the autonomous-send gate writes to `Message.hardRuleFlags`
+ * (packages/domain/src/autonomous/evaluate-autonomous-send.ts) — a held message assumes someone
+ * can send it, so it explains which of the five conditions is the reason it is waiting.
+ */
+const HOLD_EXPLANATIONS: Record<string, string> = {
+  autonomous_paused_hold: 'Held for approval — autonomous sending is currently paused.',
+  escalation_hold: 'Held for approval — this account has an open escalation.',
+  compliance_deadline_content:
+    'Held for approval — cites a vessel compliance deadline, which is never sent unreviewed.',
+  low_confidence_hold: "Held for approval — the agent's own confidence in this draft was not high.",
+};
+
+function holdExplanation(flags: string[]): string {
+  return flags.map((flag) => HOLD_EXPLANATIONS[flag] ?? `Held for approval — ${flag}.`).join(' ');
+}
+
 export function AccountDetailPage({ accountId, onBack }: { accountId: string; onBack: () => void }) {
   const [detail, setDetail] = useState<AccountDetail | null>(null);
   const [decision, setDecision] = useState<Decision>(null);
@@ -161,6 +178,15 @@ export function AccountDetailPage({ accountId, onBack }: { accountId: string; on
                     </div>
                   )}
                 </div>
+
+                {pendingMessage.hardRuleFlags?.length && !editing ? (
+                  <div className="policy-tags">
+                    <div className="policy-tag">
+                      <Icon name="flag" />
+                      <span className="pt-body">{holdExplanation(pendingMessage.hardRuleFlags)}</span>
+                    </div>
+                  </div>
+                ) : null}
 
                 {edited && !editing && (
                   <div className="policy-tags">
