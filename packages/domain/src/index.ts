@@ -44,3 +44,11 @@ export type {
 } from './escalation/generate-next-step.js';
 export { HANDOFF_SYSTEM_PROMPT, FALLBACK_NEXT_STEP_BY_RULE } from './escalation/handoff-system-prompt.js';
 export { LOCKED_POLICY } from './settings/locked-policy.js';
+export { evaluateAutonomousSend } from './autonomous/evaluate-autonomous-send.js';
+export type {
+  AutonomousSendInput,
+  AutonomousSendDecision,
+  HoldReason,
+} from './autonomous/evaluate-autonomous-send.js';
+export { shouldSampleSend } from './autonomous/should-sample-send.js';
+export type { ShouldSampleInput } from './autonomous/should-sample-send.js';

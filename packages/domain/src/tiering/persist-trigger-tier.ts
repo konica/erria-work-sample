@@ -1,6 +1,5 @@
 import type { PrismaClient } from '@erria/db';
 import { recommendTierForTrigger } from './recommend-tier.js';
-import { NotImplementedFlowError } from '../errors.js';
 
 export interface IncomingTriggerInput {
   accountId: string;
@@ -38,14 +37,6 @@ export async function recordIncomingTrigger(
       triggerConfidence: input.confidenceLabel,
       hasComplianceDeadlineContent: input.hasComplianceDeadlineContent,
     });
-
-    if (recommendation.tier === 1) {
-      throw new NotImplementedFlowError(
-        'recommendTierForTrigger returned tier 1, but Flow 1 only implements the Tier 2 ' +
-          'draft path documented in the application architecture doc §5. Autonomous Tier 1 ' +
-          'sending is a documented gap (see ADR-0002) and needs its own design.',
-      );
-    }
 
     const trigger = await tx.trigger.create({
       data: {

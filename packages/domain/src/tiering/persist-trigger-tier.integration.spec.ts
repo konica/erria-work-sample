@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startTestPostgres, stopTestPostgres, type TestPostgres } from '@erria/db/test-utils';
 import { recordIncomingTrigger } from './persist-trigger-tier.js';
-import { NotImplementedFlowError } from '../errors.js';
 
 describe('recordIncomingTrigger', () => {
   let testDb: TestPostgres;
@@ -175,42 +174,24 @@ describe('recordIncomingTrigger', () => {
     expect(events[0].eventType).toBe('current_draft');
   });
 
-  it('throws NotImplementedFlowError for a fully-qualified Tier 1 recommendation', async () => {
+  it('persists a Tier 1 recommendation now that ADR-0006 lifted the deferral', async () => {
     const account = await createAccount({ currentTier: 1 });
 
-    await expect(
-      recordIncomingTrigger(testDb.prisma, {
-        accountId: account.id,
-        vesselId: null,
-        category: 'test',
-        description: 'test',
-        source: 'public_data',
-        confidenceLabel: 'high',
-        verifiabilityNote: 'test',
-        detectedAt: new Date(),
-        hasComplianceDeadlineContent: false,
-      }),
-    ).rejects.toThrow(NotImplementedFlowError);
-  });
+    const result = await recordIncomingTrigger(testDb.prisma, {
+      accountId: account.id,
+      vesselId: null,
+      category: 'test',
+      description: 'test',
+      source: 'public_data',
+      confidenceLabel: 'high',
+      verifiabilityNote: 'test',
+      detectedAt: new Date(),
+      hasComplianceDeadlineContent: false,
+    });
 
-  it('rolls the whole write back when the recommendation is rejected', async () => {
-    const account = await createAccount({ currentTier: 1 });
+    expect(result.tier).toBe(1);
 
-    await expect(
-      recordIncomingTrigger(testDb.prisma, {
-        accountId: account.id,
-        vesselId: null,
-        category: 'test',
-        description: 'test',
-        source: 'public_data',
-        confidenceLabel: 'high',
-        verifiabilityNote: 'test',
-        detectedAt: new Date(),
-        hasComplianceDeadlineContent: false,
-      }),
-    ).rejects.toThrow(NotImplementedFlowError);
-
-    expect(await testDb.prisma.trigger.count({ where: { accountId: account.id } })).toBe(0);
-    expect(await testDb.prisma.tierHistoryEvent.count({ where: { accountId: account.id } })).toBe(0);
+    const refreshed = await testDb.prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+    expect(refreshed.currentTier).toBe(1);
   });
 });

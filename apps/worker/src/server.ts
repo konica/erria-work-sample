@@ -22,8 +22,9 @@ export function buildServer(deps?: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: true });
   app.get('/health', async () => ({ status: 'ok' }));
   if (deps) {
-    registerProcessTriggerRoute(app, deps);
-    registerDispatchMessageRoute(app, { prisma: deps.prisma, dispatchMode: deps.dispatchMode ?? 'sandbox' });
+    const dispatchMode = deps.dispatchMode ?? 'sandbox';
+    registerProcessTriggerRoute(app, { ...deps, dispatchMode });
+    registerDispatchMessageRoute(app, { prisma: deps.prisma, dispatchMode });
     registerClassifyInboundRoute(app, deps);
   }
   return app;
