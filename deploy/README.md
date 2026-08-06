@@ -47,8 +47,57 @@ docker run --rm --network erria_default \
 docker compose -f compose.yaml -f compose.deploy.yaml up -d --wait
 ```
 
-(The CI-driven version of the pull/migrate/up sequence, with the failed-migration-aborts-the-deploy
-guarantee, is issue #58. Run it by hand until that lands.)
+The CI-driven version of this same sequence — `deploy/deploy.sh`, invoked by
+[`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) after
+[`.github/workflows/publish.yml`](../.github/workflows/publish.yml) pushes new images — is issue
+#58; see "CI-driven deploy" below. Run the manual sequence above by hand until the VM this targets
+(#56) actually exists and those repo variables are set.
+
+## CI-driven deploy (issue #58)
+
+Merging to `main` runs `publish.yml` (builds and pushes `console-api`/`worker` to GHCR tagged with
+the commit SHA — never `latest`; path-filtered per app so an unrelated app's sources don't trigger
+a rebuild, with a registry-side retag when a rebuild is skipped so the SHA tag still exists for the
+step below to pull), then `deploy.yml` SSHes to the VM and runs `deploy/deploy.sh`, which is the
+same pull → migrate → up -d → health-check sequence documented above, with one load-bearing
+property: **a failed migration aborts before `up -d`**, so the previous containers keep serving
+rather than the deploy limping forward on a schema neither revision fully matches.
+
+`deploy.yml` needs these set once the VM exists (#56), under
+**Settings → Secrets and variables → Actions**:
+
+| Name | Kind | Value |
+|---|---|---|
+| `DEPLOY_SSH_KEY` | Secret | Private half of the deploy SSH key |
+| `DEPLOY_SSH_HOST` | Variable | The VM's static public IP or hostname (terraform's `public_ip_address` output) |
+| `DEPLOY_SSH_USER` | Variable | The deploy user (terraform's `admin_username`, `deploy` by default) |
+| `DEPLOY_SSH_KNOWN_HOSTS` | Variable | `ssh-keyscan <host>` output, captured once by hand — pinned rather than accepted on first connect, since a CI runner has no independent way to verify a host key itself |
+| `DEPLOY_PATH` | Variable | The repo checkout path on the VM, e.g. `/opt/erria` |
+
+No application secret lives in GitHub for any of this — GitHub Actions holds only the SSH key
+above and the GHCR push (the automatic `GITHUB_TOKEN`, not a stored credential). Everything
+`compose.deploy.yaml` needs — `POSTGRES_PASSWORD`, `ANTHROPIC_API_KEY`, and the rest — stays only
+in the VM's own `.env`, exactly as "Environment variables" below already describes.
+
+## Rolling back
+
+Re-pin `DEPLOY_IMAGE_TAG` to the previous commit SHA and re-run the deploy (re-run
+`deploy.yml` with `workflow_dispatch` isn't wired up — for now, this is `ssh` to the VM and run
+`DEPLOY_IMAGE_TAG=<previous sha> bash deploy/deploy.sh` by hand, or push a revert commit so
+`publish.yml`/`deploy.yml` do it). Code reverts in the time it takes to pull two images and
+restart the containers — tens of seconds.
+
+**That is the entire scope of what rollback undoes.** It restores *code*, nothing else. If the
+migration that shipped alongside the bad revision only added things (ADR-0008's expand phase),
+the old code never noticed the addition and rollback is complete. If the bad revision's migration
+had already *removed* something — which ADR-0008 says should never happen in the same release as
+the code that stops needing it, but a rule is not an enforcement mechanism — rolling back the code
+does not restore what the migration dropped. That needs a reverse migration (only possible if
+nothing downstream already depended on the removal) or a restore from the nightly `pg_dump`
+(deployment design §6), and both are slower and more manual than re-pinning a SHA.
+
+Say this plainly to anyone reading this file expecting rollback to be a general undo button: it
+buys time to investigate a bad deploy. It does not undo a destructive migration.
 
 ## Verifying Postgres is not reachable from the internet
 

@@ -1,0 +1,182 @@
+name: Publish
+
+# On merge to main: build console-api and worker, push both to GHCR tagged with the commit
+# SHA (never `latest` — deploy.yml pins an explicit SHA, ticket #58/#58's deployment design §7).
+# GHCR rather than ACR: free with the repository, no extra registry credential to manage
+# (ADR-0007). Images stay private to the repo — GITHUB_TOKEN-pushed GHCR packages default to
+# private regardless of the repo's own visibility, and nothing here changes that.
+#
+# ci.yml (lint/typecheck/test) already ran on this commit via its own `push: branches: [main]`
+# trigger and is left completely unmodified — this workflow only adds the publish step on top.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  CONSOLE_API_IMAGE: ghcr.io/${{ github.repository }}/console-api
+  WORKER_IMAGE: ghcr.io/${{ github.repository }}/worker
+
+jobs:
+  # Decides, per app, whether this commit actually touches that app's build inputs. A
+  # console-only change (e.g. apps/console-web or apps/console-api) must not rebuild worker,
+  # and vice versa — both apps share packages/db and packages/domain, so a change there rebuilds
+  # both. This is a separate job (not a step inside each build job) so its git-diff logic runs
+  # once, not twice.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      console_api: ${{ steps.filter.outputs.console_api }}
+      worker: ${{ steps.filter.outputs.worker }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the diff below compares against github.event.before, which can be
+          # arbitrarily far back on a squash-merge-heavy main. fetch-depth: 0 avoids a "before
+          # commit not found" failure on a shallow clone.
+          fetch-depth: 0
+
+      - id: filter
+        name: Diff changed paths against github.event.before
+        run: |
+          set -euo pipefail
+
+          # All-zeros `before` shows up on the very first push of a branch (no prior commit to
+          # diff against) — treat that as "everything changed" rather than erroring on a diff
+          # against a SHA that doesn't exist.
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            echo "No previous commit to diff against; treating both apps as changed."
+            echo "console_api=true" >> "$GITHUB_OUTPUT"
+            echo "worker=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")"
+          echo "Changed files:"
+          echo "$changed_files"
+
+          # Anything under packages/db or packages/domain resolves into both runtime images
+          # (both Dockerfiles build these before the app itself), so a change there rebuilds
+          # both. Workspace-wide manifests (package.json, the lockfile, the workspace file) are
+          # treated the same way for the same reason.
+          shared_pattern='^(packages/db/|packages/domain/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)'
+
+          console_api=false
+          worker=false
+
+          if echo "$changed_files" | grep -qE "$shared_pattern"; then
+            console_api=true
+            worker=true
+          fi
+          # console-api's image also bundles the built console-web SPA (Application
+          # architecture §6 / ADR-0007 — one container serves the SPA and the API).
+          if echo "$changed_files" | grep -qE '^apps/(console-api|console-web)/'; then
+            console_api=true
+          fi
+          if echo "$changed_files" | grep -qE '^apps/worker/'; then
+            worker=true
+          fi
+
+          echo "console_api=$console_api" >> "$GITHUB_OUTPUT"
+          echo "worker=$worker" >> "$GITHUB_OUTPUT"
+
+  publish-console-api:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push console-api (sources changed)
+        if: needs.changes.outputs.console_api == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/console-api/Dockerfile
+          push: true
+          tags: ${{ env.CONSOLE_API_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=console-api
+          cache-to: type=gha,mode=max,scope=console-api
+
+      - name: Alias the existing image under this commit's tag (no console-api sources changed)
+        if: needs.changes.outputs.console_api == 'false'
+        run: |
+          set -euo pipefail
+          source_tag="${{ env.CONSOLE_API_IMAGE }}:${{ github.event.before }}"
+
+          # The chain only holds if that source tag actually exists — true by induction once
+          # the first commit after this workflow's introduction has built and pushed a real
+          # image, but not true yet on that very first commit. Fall back to a real build rather
+          # than erroring, so publish never depends on manually seeding a tag.
+          if docker buildx imagetools inspect "$source_tag" > /dev/null 2>&1; then
+            docker buildx imagetools create \
+              --tag "${{ env.CONSOLE_API_IMAGE }}:${{ github.sha }}" \
+              "$source_tag"
+          else
+            echo "$source_tag not found in the registry yet; building instead of aliasing."
+            docker buildx build \
+              --file ./apps/console-api/Dockerfile \
+              --push \
+              --tag "${{ env.CONSOLE_API_IMAGE }}:${{ github.sha }}" \
+              --cache-from type=gha,scope=console-api \
+              --cache-to type=gha,mode=max,scope=console-api \
+              .
+          fi
+
+  publish-worker:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push worker (sources changed)
+        if: needs.changes.outputs.worker == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/worker/Dockerfile
+          push: true
+          tags: ${{ env.WORKER_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+      - name: Alias the existing image under this commit's tag (no worker sources changed)
+        if: needs.changes.outputs.worker == 'false'
+        run: |
+          set -euo pipefail
+          source_tag="${{ env.WORKER_IMAGE }}:${{ github.event.before }}"
+
+          if docker buildx imagetools inspect "$source_tag" > /dev/null 2>&1; then
+            docker buildx imagetools create \
+              --tag "${{ env.WORKER_IMAGE }}:${{ github.sha }}" \
+              "$source_tag"
+          else
+            echo "$source_tag not found in the registry yet; building instead of aliasing."
+            docker buildx build \
+              --file ./apps/worker/Dockerfile \
+              --push \
+              --tag "${{ env.WORKER_IMAGE }}:${{ github.sha }}" \
+              --cache-from type=gha,scope=worker \
+              --cache-to type=gha,mode=max,scope=worker \
+              .
+          fi
