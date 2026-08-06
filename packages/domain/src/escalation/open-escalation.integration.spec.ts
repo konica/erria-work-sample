@@ -91,3 +91,85 @@ describe('openEscalation', () => {
     expect(events[0].toTier).toBe(3);
   });
 });
+
+describe('openEscalation and earned progress', () => {
+  let testDb: TestPostgres;
+
+  beforeAll(async () => {
+    testDb = await startTestPostgres();
+  }, 120_000);
+
+  afterAll(async () => {
+    await stopTestPostgres(testDb);
+  });
+
+  async function seedWithProgress(count = 4) {
+    return testDb.prisma.account.create({
+      data: {
+        companyName: 'Progress Co',
+        segment: 'Coastal freight',
+        hub: 'Haiphong',
+        icpScore: 80,
+        icpBand: 'high',
+        relationshipSummary: 'Good history',
+        currentTier: 2,
+        tierRationale: 'Earning trust',
+        cleanApprovalsCount: count,
+      },
+    });
+  }
+
+  const RESETTING = ['negative_sentiment', 'relationship_conflict'] as const;
+  const PRESERVING = [
+    'pricing_question',
+    'technical_compliance_question',
+    'non_english_language',
+    'classification_uncertain',
+  ] as const;
+
+  for (const rule of RESETTING) {
+    it(`resets earned progress for ${rule} — trust was damaged`, async () => {
+      const account = await seedWithProgress(4);
+
+      await openEscalation(testDb.prisma, {
+        accountId: account.id,
+        triggerMessageId: null,
+        rule,
+        reasonSummary: 'test',
+        detail: 'test',
+        recommendedNextStep: 'test',
+      });
+
+      const refreshed = await testDb.prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+      expect(refreshed.cleanApprovalsCount).toBe(0);
+
+      const event = await testDb.prisma.tierHistoryEvent.findFirstOrThrow({
+        where: { accountId: account.id, eventType: 'escalate' },
+      });
+      expect(event.reason).toMatch(/progress reset|clean-approval progress/i);
+    });
+  }
+
+  for (const rule of PRESERVING) {
+    it(`keeps earned progress for ${rule} — not a trust failure`, async () => {
+      const account = await seedWithProgress(4);
+
+      await openEscalation(testDb.prisma, {
+        accountId: account.id,
+        triggerMessageId: null,
+        rule,
+        reasonSummary: 'test',
+        detail: 'test',
+        recommendedNextStep: 'test',
+      });
+
+      const refreshed = await testDb.prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+      expect(refreshed.cleanApprovalsCount).toBe(4);
+
+      const event = await testDb.prisma.tierHistoryEvent.findFirstOrThrow({
+        where: { accountId: account.id, eventType: 'escalate' },
+      });
+      expect(event.reason).toMatch(/progress kept|retained/i);
+    });
+  }
+});

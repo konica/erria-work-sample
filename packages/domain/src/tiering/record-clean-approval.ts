@@ -1,12 +1,13 @@
 import type { PrismaClient } from '@erria/db';
+import { recommendTierForTrigger } from './recommend-tier.js';
 
 /**
  * Spec §3's promotion counter and spec §8's "core promotion signal": a Tier 2 draft that went out
  * exactly as the agent wrote it, on an account with no negative signal since.
  *
- * Deliberately stops at the counter. Promoting to Tier 1 is ADR-0005's deferred half — Tier 1 means
- * autonomous send, which does not exist (ADR-0002), so an account promoted into it would carry a
- * tier badge describing behavior the system cannot perform and would break its own next trigger.
+ * Performs the promotion itself as of ADR-0006 (which superseded ADR-0005's deferral). Promotion
+ * needs BOTH conditions §3 states — the count and an independently qualifying score — so a
+ * well-behaved account with a weak fit stays at Tier 2 forever, which is correct.
  */
 export async function recordCleanApproval(prisma: PrismaClient, messageId: string): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
@@ -41,6 +42,61 @@ export async function recordCleanApproval(prisma: PrismaClient, messageId: strin
       },
     });
 
+    await promoteIfEarned(tx, account.id);
+
     return true;
+  });
+}
+
+type Tx = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
+
+/**
+ * ADR-0004: earning is the only route to Tier 1, so this is the only code that may set it.
+ */
+async function promoteIfEarned(tx: Tx, accountId: string): Promise<void> {
+  const account = await tx.account.findUniqueOrThrow({ where: { id: accountId } });
+  if (account.currentTier === 1) {
+    return;
+  }
+
+  const settings = await tx.setting.findUnique({ where: { id: 1 } });
+  const threshold = settings?.tier1PromotionThreshold ?? 2;
+  if (account.cleanApprovalsCount < threshold) {
+    return;
+  }
+
+  // "Independently qualifies on score" means the BASE tier — before the rollout overlay caps it —
+  // is 1. Passing accountAlreadyEarnedTier1: true suppresses the overlay so we read the underlying
+  // score judgment, which is exactly the question promotion asks.
+  const scoreJudgment = recommendTierForTrigger({
+    accountAlreadyEarnedTier1: true,
+    icpScore: account.icpScore,
+    triggerConfidence: 'high',
+    hasComplianceDeadlineContent: false,
+  });
+  if (scoreJudgment.tier !== 1) {
+    return;
+  }
+
+  await tx.account.update({
+    where: { id: accountId },
+    data: {
+      currentTier: 1,
+      tierRationale:
+        `Earned Tier 1: ${account.cleanApprovalsCount} clean approvals, and the account's score ` +
+        `independently qualifies. The agent may now send to this account without prior review.`,
+    },
+  });
+
+  await tx.tierHistoryEvent.create({
+    data: {
+      accountId,
+      eventType: 'promote',
+      fromTier: account.currentTier,
+      toTier: 1,
+      reason:
+        `Promoted to Tier 1 — ${account.cleanApprovalsCount} clean approvals met the threshold of ` +
+        `${threshold}, and the account's score independently qualifies (both are required).`,
+    },
   });
 }
