@@ -1,23 +1,88 @@
-# Caddy site config for the deployment overlay (issue #57, compose.deploy.yaml).
+# Caddy site config for the deployment overlay (issue #57, compose.deploy.yaml). Hardened per
+# issue #59 ("Keycloak hardening for public exposure") — admin console blocked, security
+# headers, and a rate limit on the token endpoint, layered on the routes issue #57 established
+# rather than replacing them.
 #
 # One hostname, automatic HTTPS: Caddy requests and renews a Let's Encrypt certificate for
 # {$DEPLOY_DOMAIN} with no certificate config to write, using the ACME HTTP-01 challenge on
 # port 80 (also published, for exactly that) plus the redirect to 443, which Caddy adds itself.
-#
-# Deliberately does NOT block /auth/admin* or add security headers/rate limiting — that
-# hardening is issue #59 ("Keycloak hardening for public exposure"), layered on the routes this
-# file establishes rather than replacing them. Today, both routes below are open.
-
 {
 	email {$LETSENCRYPT_EMAIL}
+	# github.com/mholt/caddy-ratelimit (deploy/Caddy.Dockerfile) ships no default position in
+	# Caddy's directive order — without this, `rate_limit` below would run after
+	# `reverse_proxy` and never actually stop a request before it reached Keycloak.
+	order rate_limit before reverse_proxy
 }
 
 {$DEPLOY_DOMAIN} {
+	# Verified empirically (issue #59) with `caddy adapt`: with no matcher, `header` compiles
+	# to the first handler in the site's subroute and applies to every response below,
+	# including the 404 and 429 responses further down — not just the two reverse_proxy
+	# targets. HSTS is safe unconditionally because Caddy never serves this site over plain
+	# HTTP in the first place (it redirects to HTTPS itself); there is no HTTP-only fallback
+	# to lock browsers out of. `frame-ancestors 'none'` is the CSP successor to
+	# X-Frame-Options — every current browser honors it, and unlike X-Frame-Options it isn't
+	# limited to a single allow-listed origin.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Content-Security-Policy "frame-ancestors 'none'"
+	}
+
+	# Keycloak ships its own default browser security headers (Strict-Transport-Security,
+	# X-Content-Type-Options, X-Frame-Options: SAMEORIGIN) on every response it sends. Verified
+	# empirically that `header` above does not overwrite them: it runs (and sets its values)
+	# before `reverse_proxy` executes, and reverse_proxy then *adds* Keycloak's own copies on
+	# top rather than replacing what's already set — the wire result was two
+	# Strict-Transport-Security lines and two X-Content-Type-Options lines, not one. Stripped
+	# here, at the two places a Keycloak response reaches the client, so this site's own header
+	# block above is the only source of truth. X-Frame-Options is dropped rather than kept
+	# alongside our CSP: SAMEORIGIN is weaker than (and redundant with) frame-ancestors 'none'
+	# above, and every browser that honors CSP ignores X-Frame-Options when both are present, so
+	# there is nothing it adds — only a second, inconsistent policy for something to parse.
+
+	# The Keycloak admin console and its REST API — the highest-value target on the box on a
+	# first-time public deployment (issue #59). A bare 404, not a 403 or a redirect: a 403
+	# would confirm something is listening at this path, and a redirect to Keycloak's own
+	# login screen would leak that the admin console exists at all. Verified (via `caddy
+	# adapt`'s route ordering, then a live request) that this matches, and therefore
+	# short-circuits, before the general /auth/* proxy below ever sees the request.
+	# Administration itself happens over an SSH tunnel straight to Keycloak's loopback-bound
+	# port (compose.deploy.yaml, deploy/README.md) — Caddy is never in that path at all.
+	respond /auth/admin* 404
+
+	# Keycloak's token endpoint specifically, ahead of the general /auth/* proxy below: a
+	# login attempt is one request to this path whether the password is right or wrong, so
+	# throttling by source IP here caps credential-stuffing throughput before it ever reaches
+	# Keycloak — independent of which username is being tried, which is what Keycloak's own
+	# per-account brute-force detection (keycloak/realm-export.deploy.json.template) cannot
+	# see. 10 requests/minute/IP is well above any real login (including a fat-fingered
+	# retry), and low enough to blunt a script. Verified locally: an 11th request within the
+	# window gets 429 without reaching the upstream.
+	handle /auth/realms/*/protocol/openid-connect/token {
+		rate_limit {
+			zone token_per_ip {
+				key {remote_host}
+				events 10
+				window 1m
+			}
+		}
+		reverse_proxy keycloak:8080 {
+			header_down -Strict-Transport-Security
+			header_down -X-Content-Type-Options
+			header_down -X-Frame-Options
+		}
+	}
+
 	# Keycloak, reachable under /auth/* because compose.deploy.yaml sets
 	# KC_HTTP_RELATIVE_PATH=/auth — one hostname/certificate instead of a second DNS record.
 	# No path stripping here (a plain `reverse_proxy <matcher> <upstream>`, not `handle_path`):
 	# Keycloak itself expects requests to arrive with the /auth prefix intact.
-	reverse_proxy /auth/* keycloak:8080
+	reverse_proxy /auth/* keycloak:8080 {
+		header_down -Strict-Transport-Security
+		header_down -X-Content-Type-Options
+		header_down -X-Frame-Options
+	}
 
 	# Everything else: console-api, which also serves the built console-web SPA on this same
 	# origin (ADR-0007) — there is no separate console-web upstream to route to here.

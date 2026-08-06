@@ -32,6 +32,13 @@ sed "s|DEPLOY_ORIGIN_PLACEHOLDER|https://${DEPLOY_DOMAIN}|g" \
 
 docker compose -f compose.yaml -f compose.deploy.yaml pull
 
+# caddy is `build:`, not `image:` (issue #59 — stock caddy:2.9-alpine has no rate-limiting
+# handler, so deploy/Caddy.Dockerfile compiles one in). `pull` above skips it; build it
+# explicitly rather than relying on `up -d`'s implicit build-if-missing, so a redeploy that
+# changed the Caddyfile or Dockerfile always picks up the change instead of reusing a stale
+# local image.
+docker compose -f compose.yaml -f compose.deploy.yaml build caddy
+
 # Postgres needs to actually be up (and its network need to exist) before a migration can
 # reach it — bring just that up first.
 docker compose -f compose.yaml -f compose.deploy.yaml up -d --wait postgres
@@ -169,9 +176,140 @@ it seeds **no users** — per #59, reviewer/admin accounts on the public deploym
 hand through the admin console once the realm exists, each a distinct account with its own
 password, never a fixture-seeded default.
 
-The admin console itself is reachable at `https://<domain>/auth/admin` until #59 blocks it at
-Caddy; until then, treat it as available only because no port scan has found it yet, not because
-anything is actually restricting it.
+The realm's `CONFIGURE_TOTP` required action is a **default action** (verified locally against
+this exact template — see the PR), so the first login of any hand-created account is forced
+through OTP enrollment before it reaches the app; there is no separate "make this account use
+MFA" step. Every account in this realm can approve a send (`reviewer` and `admin` both can —
+`messages.controller.ts` has no role restriction on approve/reject), so requiring OTP for the
+whole realm is exactly "MFA for any account that can approve a send," not a broader ask.
+
+### Creating reviewer/admin accounts (admin console, over the SSH tunnel)
+
+The admin console is never reachable over the public hostname — Caddy returns a bare 404 for
+`/auth/admin*` (`deploy/Caddyfile`), and Keycloak's port is bound to the VM's own loopback
+interface (`compose.deploy.yaml`), not published to the internet. Reach it by tunnelling to that
+loopback port:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 <vm-user>@<vm-host>
+# then, on the machine that ran the command above:
+open http://localhost:8080/auth/admin
+```
+
+Log in with `KC_BOOTSTRAP_ADMIN_USERNAME`/`KC_BOOTSTRAP_ADMIN_PASSWORD` from `.env`, then for each
+reviewer/admin: Users → Add user → set username/email → Credentials tab → set a temporary
+password (`resetPasswordAllowed: true` lets them change it on first login) → Role mapping → assign
+`reviewer` or `admin`. Leave `CONFIGURE_TOTP` in the user's required actions (it's there by
+default) — that's what forces the OTP-enrollment screen on their first login. Hand each person
+their own username and temporary password out of band (password manager, not email/Slack in the
+clear); never reuse one login for two reviewers (`decidedBy` on an approval is only meaningful if
+it names one person — see `CONTEXT.md`'s Clean Approval entry).
+
+### Removing the bootstrap admin
+
+`KC_BOOTSTRAP_ADMIN_USERNAME`/`PASSWORD` exists only to create the first real admin account —
+Keycloak documents it as a one-time bootstrap credential, not a standing login. Once at least one
+named `admin` account above can log in and manage users, remove it over the same SSH tunnel,
+authenticated as that **named** admin (not as the bootstrap account itself — it is about to be
+deleted, and a session authenticated as the account it's deleting loses authorization the moment
+the delete succeeds, so this order avoids fighting your own session):
+
+```bash
+# --password omitted deliberately: kcadm prompts interactively so the value never lands in
+# shell history. Realm is master — the bootstrap admin lives there, not in erria.
+docker compose -f compose.yaml -f compose.deploy.yaml exec keycloak \
+  /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080/auth \
+  --realm master --user <your-named-admin-username>
+
+docker compose -f compose.yaml -f compose.deploy.yaml exec keycloak \
+  /opt/keycloak/bin/kcadm.sh get users -r master -q username="$KC_BOOTSTRAP_ADMIN_USERNAME" \
+  --fields id --format csv --noquotes
+# then, with the id printed above:
+docker compose -f compose.yaml -f compose.deploy.yaml exec keycloak \
+  /opt/keycloak/bin/kcadm.sh delete users/<id-from-previous-command> -r master
+```
+
+(Verified against a local Keycloak container: this exact `get` → `delete` pair removes the
+bootstrap admin and the account can no longer authenticate afterward.) Then remove
+`KC_BOOTSTRAP_ADMIN_USERNAME`/`PASSWORD` from the VM's `.env` (they only take effect on container
+creation, not on every restart, so leaving stale values there is inert but confusing) and rotate
+the password manager entry to reflect that the account no longer exists.
+
+## Verifying the Keycloak hardening (issue #59)
+
+**Required before this ticket is considered done — from a machine that is not the VM itself**,
+against the live `https://<DEPLOY_DOMAIN>`, the same standard the Postgres check above holds to.
+Record each command and its output in the PR.
+
+```bash
+# Admin console: 404 from the internet, on every admin path, not just the top one.
+curl -so /dev/null -w '%{http_code}\n' https://<domain>/auth/admin
+curl -so /dev/null -w '%{http_code}\n' https://<domain>/auth/admin/master/console/
+curl -so /dev/null -w '%{http_code}\n' https://<domain>/auth/admin/realms/erria/users
+# expect 404 on all three, and confirm separately that the admin console IS reachable over the
+# SSH tunnel (see "Creating reviewer/admin accounts" above) — the internet block and the tunnel
+# path are independent layers and both need to be shown working, not just the block.
+
+# Security headers, on both a Keycloak-routed and a console-api-routed path (deploy/Caddyfile
+# applies `header` before either reverse_proxy, but confirm rather than trust the config).
+curl -sD - -o /dev/null https://<domain>/auth/realms/erria/.well-known/openid-configuration
+curl -sD - -o /dev/null https://<domain>/
+# expect Strict-Transport-Security, X-Content-Type-Options: nosniff, and
+# Content-Security-Policy: frame-ancestors 'none' on both — each header exactly once. Keycloak
+# ships its own default copies of the first two plus X-Frame-Options; deploy/Caddyfile's
+# `header_down` lines on both Keycloak-facing reverse_proxy blocks strip those before they reach
+# the client, verified locally against a real Keycloak container (without `header_down`, the
+# response carries two Strict-Transport-Security lines and two X-Content-Type-Options lines,
+# not one — worth re-checking here if either reverse_proxy block is ever edited).
+
+# Rate limiting on the token endpoint: the 11th request within a minute from one IP should 429.
+for i in $(seq 1 11); do
+  curl -so /dev/null -w '%{http_code}\n' \
+    https://<domain>/auth/realms/erria/protocol/openid-connect/token
+done
+# expect ten responses (401/400 for a bodyless POST — this is only testing the rate limit, not
+# submitting real credentials) followed by 429.
+```
+
+**Brute-force lockout** — demonstrate against one of the real reviewer/admin accounts created
+above (never against a real login you still need immediately afterward; the account is
+temporarily locked out for up to 15 minutes per `realm-export.deploy.json.template`'s
+`maxFailureWaitSeconds`):
+
+```bash
+for i in 1 2 3; do
+  curl -s -X POST https://<domain>/auth/realms/erria/protocol/openid-connect/token \
+    -d grant_type=password -d client_id=console-web \
+    -d username=<a-real-username> -d password=wrong
+done
+```
+
+Then immediately retry with the *correct* password and confirm it is also rejected while the
+lockout window is active (`{"error":"invalid_grant","error_description":"Invalid user
+credentials"}` even though the password is right — verified locally this way, since Keycloak
+26's password-grant response does not otherwise distinguish "wrong password" from "locked out").
+Check `attack-detection/brute-force/users/<id>` via kcadm for the authoritative
+`disabled`/`failedLoginNotBefore` state if the token endpoint's response is ambiguous.
+
+**MFA enforcement** — create one throwaway test account (`reviewer` role, so it doesn't pollute
+real `decidedBy` data), and confirm the browser login flow stops at an OTP-enrollment screen
+before reaching the console, on that account's very first login. Delete the throwaway account
+afterward.
+
+**Unauthenticated access** — confirm a request to a console route with no session (a fresh
+private/incognito window against `https://<domain>/`) redirects to the Keycloak login page rather
+than rendering any account data, and that hitting an API route directly
+(`curl https://<domain>/api/accounts`) returns 401, not data. This is `AuthGuard` (#76/#78)
+exercised end-to-end through the hardened Caddy/Keycloak path this ticket adds, rather than new
+behavior of its own — the check here is that nothing in this ticket's changes broke it.
+
+**Realm export contains no secrets** — grep confirms it, but state the check explicitly since
+it's the acceptance criterion:
+
+```bash
+grep -iE 'password|secret|credentials' keycloak/realm-export.deploy.json.template
+# expect no match other than field *names* like otpPolicyType — no value that is itself a secret
+```
 
 ## Environment variables
 
