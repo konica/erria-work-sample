@@ -15,3 +15,12 @@
 SHELL=/bin/sh
 0 6 * * * cd /opt/erria && docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker --job=followup-cadence >> /var/log/erria/followup-cadence.log 2>&1
 5 6 * * * cd /opt/erria && docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker --job=audit-sample-maintenance >> /var/log/erria/audit-sample-maintenance.log 2>&1
+
+# Monitoring (issue #61) — both scripts publish a custom Azure Monitor metric via the VM's own
+# managed identity (deploy/scripts/lib-azure-metric.sh); infra/terraform/monitoring.tf alerts on
+# them. Disk usage every 5 minutes: cheap to check, and the fastest-moving of the two — a log
+# loop or a stray large file can fill 64 GiB in minutes, not days. TLS expiry once a day is
+# plenty against a 90-day Let's Encrypt certificate; it needs DEPLOY_DOMAIN from .env, which the
+# other two jobs above don't (docker compose reads .env itself; a plain script does not).
+*/5 * * * * /opt/erria/deploy/scripts/report-disk-usage.sh >> /var/log/erria/disk-usage.log 2>&1
+17 3 * * * . /opt/erria/.env && /opt/erria/deploy/scripts/report-tls-expiry.sh >> /var/log/erria/tls-expiry.log 2>&1

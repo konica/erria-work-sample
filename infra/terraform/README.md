@@ -1,7 +1,13 @@
 # Review environment — Terraform
 
 Provisions the Azure resources for ticket #56: the review VM, its static IP, the NSG,
-the backup storage account, an optional DNS record, and a budget alert. Grounded in
+the backup storage account, an optional DNS record, and a budget alert. Also provisions
+the Azure-side half of ticket #61's monitoring (`monitoring.tf`): a system-assigned
+identity on the VM, a role assignment letting that identity publish metrics about
+itself, an action group, and the disk-usage/TLS-expiry metric alerts — see
+`deploy/README.md`'s "Monitoring (issue #61)" section for what those alerts are and how
+to verify them; the scripts that feed them live in `deploy/scripts/`, run from
+`deploy/crontab`. Grounded in
 [ADR-0007](../../docs/adr/0007-mvp-deploys-to-one-vm-with-docker-compose.md) and the
 [MVP deployment design](../../docs/superpowers/specs/2026-08-04-mvp-deployment-design.md).
 

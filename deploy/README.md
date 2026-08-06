@@ -311,6 +311,148 @@ grep -iE 'password|secret|credentials' keycloak/realm-export.deploy.json.templat
 # expect no match other than field *names* like otpPolicyType — no value that is itself a secret
 ```
 
+## Monitoring (issue #61)
+
+Sized for two people and one box, same constraint the deployment design's §8 states: no Log
+Analytics workspace, no Application Insights, no agent — those were a managed-design cost line
+with no counterpart here. Grafana, Prometheus, distributed tracing, an SRE/SLO program and an
+on-call rotation are deliberately not built either; the below is already more than two people
+will actively watch.
+
+### Log rotation
+
+Every service in `compose.deploy.yaml` has a `logging:` block (`json-file` driver, `max-size` ×
+`max-file`) — 30 MB per service, 50 MB for `caddy` (it sees every public request, including
+whatever the rate limiter is busy rejecting). `docker compose logs` is the query interface; there
+is no separate log-shipping pipeline to operate.
+
+**Verify a deliberate log flood fills the cap without filling the disk:**
+
+```bash
+docker compose -f compose.yaml -f compose.deploy.yaml exec worker \
+  sh -c 'for i in $(seq 1 200000); do echo "log flood line $i"; done'
+# then, on the host:
+docker inspect --format '{{.LogPath}}' $(docker compose -f compose.yaml -f compose.deploy.yaml ps -q worker)
+# expect the file (and its .1/.2 rotations) to stop growing at ~10 MB each, 3 files total —
+# never an unbounded single file eating the disk.
+```
+
+### External uptime check — human-run, highest-value single alert
+
+This needs a third-party account this repo can't create on anyone's behalf, which is why it's a
+manual step rather than code:
+
+1. Sign up for a free uptime monitor (e.g. UptimeRobot, Freshping, or Better Uptime's free tier —
+   any of them cover this).
+2. Add an HTTPS monitor against `https://<DEPLOY_DOMAIN>/health` (console-api's own health route,
+   the same one `deploy/deploy.sh`'s post-deploy check already hits), checked every 5 minutes.
+3. Add both team members' emails as alert contacts on that monitor.
+
+This one check covers the VM, Docker, Caddy, TLS termination and the app in a single signal —
+deliberately the first thing set up, before anything more sophisticated.
+
+**Verify by stopping the stack:**
+
+```bash
+docker compose -f compose.yaml -f compose.deploy.yaml stop caddy
+# wait for the monitor's check interval to elapse, confirm both team members get an alert email,
+# then bring it back:
+docker compose -f compose.yaml -f compose.deploy.yaml start caddy
+```
+
+### Disk-usage alert at 80%
+
+**There is no host-level Azure Monitor metric for guest disk-space-used, on any VM size, with or
+without an agent** — verified against Azure's own VM metrics reference (2026-08): the host-level
+metrics for `Microsoft.Compute/virtualMachines` include disk *throughput* (`Disk Read/Write
+Bytes`, IOPS, latency, queue depth) but nothing about how full the disk is. Guest free-space is a
+guest-OS metric, and guest-OS metrics are collected only through an agent — which issue #61 rules
+out. (`Available Memory Bytes`/`Available Memory Percentage` are the one guest-shaped metric that
+actually *is* host-level and agent-free; see "Memory and CPU-credit metrics" below.)
+
+The workaround costs one curl call, not a daemon: `deploy/scripts/report-disk-usage.sh` runs from
+cron every 5 minutes (`deploy/crontab`), reads `df` locally, and publishes the result as a custom
+Azure Monitor metric using the VM's own system-assigned managed identity over IMDS
+(`deploy/scripts/lib-azure-metric.sh`) — nothing runs between ticks, so this isn't "an agent" in
+the sense the ticket rules out. `infra/terraform/monitoring.tf`'s `azurerm_monitor_metric_alert.disk_usage`
+fires at 80% (`var.disk_usage_alert_threshold_percent`) via the `ops` action group.
+
+**Verify it actually fires**, after `terraform apply` and once the VM has run at least one cron
+tick (so the custom metric exists — before that, `skip_metric_validation = true` is what lets the
+alert resource itself get created, since Terraform can't validate a metric nothing has emitted
+yet):
+
+```bash
+ssh <vm-user>@<vm-host> "fallocate -l 50G /home/<vm-user>/filler.img"
+# wait for the next 5-minute cron tick, confirm the alert fires and both team members get an
+# email, then remove it immediately — this is a review VM with a real disk budget:
+ssh <vm-user>@<vm-host> "rm /home/<vm-user>/filler.img"
+```
+
+### TLS expiry, independent of Caddy
+
+Caddy renews Let's Encrypt certificates automatically, but "automatically" is a claim worth
+verifying independently rather than trusting Caddy's own renewal logs. `deploy/scripts/report-tls-expiry.sh`
+runs once daily from cron, reads the certificate Caddy is actually presenting over the wire via
+`openssl s_client`, and publishes days-remaining as a custom metric the same way the disk check
+does. `azurerm_monitor_metric_alert.tls_expiry` fires at 14 days remaining
+(`var.tls_expiry_alert_threshold_days`) — comfortable slack before a 90-day certificate Caddy
+renews around day 60 would actually lapse.
+
+**Verify manually**, since forcing a real certificate to near-expiry isn't practical to rehearse:
+
+```bash
+./deploy/scripts/report-tls-expiry.sh   # run by hand with DEPLOY_DOMAIN exported/sourced from .env
+# expect a line like "tls_days_remaining=87 domain=<domain>" — confirm that number in the Azure
+# portal (Monitor → Metrics → scope to the VM → namespace "erria/host" → "TLS Certificate Days
+# Remaining") matches, then lower var.tls_expiry_alert_threshold_days temporarily (e.g. above
+# 87) and re-apply to confirm the alert fires against a real certificate, restoring 14 afterward.
+```
+
+### Memory and CPU-credit metrics
+
+Both are host-level `Microsoft.Compute/virtualMachines` platform metrics — collected automatically
+for this VM with nothing to enable, at **Azure portal → Monitor → Metrics → scope to the VM**:
+
+- **Available Memory Bytes** / **Available Memory Percentage** — the guest-shaped metric that
+  happens to be host-level and agent-free (unlike disk-space, above).
+- **CPU Credits Remaining** / **CPU Credits Consumed** — B-series (burstable) VMs only. **Current
+  caveat:** `infra/terraform/variables.tf`'s `vm_size` default is `Standard_D2als_v6`, a
+  non-burstable SKU chosen because `Standard_B2s` was `RegionIsOfferRestricted` on this
+  subscription (see `infra/terraform/README.md`) — these two metrics will show no data until
+  either that restriction lifts and the SKU reverts to a B-series, or this note is deleted because
+  it no longer applies. Re-check with `az vm list-skus` before assuming CPU credits are being
+  tracked.
+
+No Terraform resource is needed for either — this section exists so a human knows where to look,
+which is also this ticket's "visible in the portal" acceptance criterion in full.
+
+### Where do I look when it breaks
+
+One page, meant to be read top to bottom during an actual incident:
+
+1. **App unreachable / uptime alert fired** — `ssh` to the VM, `docker compose -f compose.yaml -f
+   compose.deploy.yaml ps`. A service not `Up (healthy)` names the problem directly. `docker
+   compose ... logs <service> --tail 200` next.
+2. **Disk-usage alert fired** — `df -h /` on the VM. `docker system df` breaks down what Docker
+   itself is using; `du -sh /var/lib/docker/containers/*/*.log` finds an individual container log
+   that outgrew its cap (shouldn't happen given the caps above, but confirms it if it does).
+   `docker compose ... down` then `up -d` is the fastest way to reclaim space from anything that
+   isn't the caps themselves (dangling images, old log rotations past `max-file`).
+3. **TLS-expiry alert fired** — check `docker compose ... logs caddy | grep -i certificate` for
+   what Caddy itself thinks happened. A failed ACME renewal is almost always port 80 being
+   unreachable (NSG/firewall changed) or Let's Encrypt rate limits from too many redeploys.
+4. **Memory pressure / OOM-killed container** — `docker stats --no-stream` for current usage
+   against the per-service `mem_limit`s in `compose.deploy.yaml`; Keycloak's JVM start is the
+   single biggest and most credit-hungry moment on the box.
+5. **A scheduled job silently stopped running** — `/var/log/erria/*.log` on the VM (cron redirects
+   every job's output there, per `deploy/crontab`); an empty or stale-dated file is the tell. (Full
+   heartbeat-absence alerting on the two application jobs is issue #62, not this one — this ticket
+   only covers the box itself.)
+6. **Nothing above explains it** — `docker compose -f compose.yaml -f compose.deploy.yaml logs
+   --since 1h` across every service, then work backwards from whichever timestamp lines up with
+   when the alert fired.
+
 ## Environment variables
 
 See `.env.deploy.example` (root) for the full list. It is a template only — every value in it is

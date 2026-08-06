@@ -23,3 +23,10 @@ manage_dns_in_azure          = false
 
 budget_amount_usd   = 95
 budget_alert_emails = ["dtrungthao@gmail.com"]
+
+# Monitoring (issue #61) — disk-usage and TLS-expiry alerts. Same address as
+# budget_alert_emails above until a second teammate's email is confirmed; the
+# ticket asks that both team members be notified.
+ops_alert_emails                   = ["dtrungthao@gmail.com"]
+disk_usage_alert_threshold_percent = 80
+tls_expiry_alert_threshold_days    = 14

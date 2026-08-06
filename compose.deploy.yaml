@@ -11,6 +11,12 @@
 # a host port pair except `caddy`'s 80/443 — Postgres in particular loses its published port
 # below, which is the single most consequential line in this file. That must be verified with
 # a port scan from off the box, not by reading this file back (see deploy/README.md).
+#
+# Every service also gets a `logging:` block (issue #61) — the `json-file` driver's `max-size`
+# × `max-file` caps how much of the 64 GiB disk a log loop can consume, so `docker compose logs`
+# stays the query interface without a Log Analytics workspace or an agent. Postgres, Docker
+# images and this same disk's logs all share one filesystem; the disk-usage alert below (see
+# `infra/terraform/monitoring.tf`) is the backstop for whatever this cap doesn't catch.
 name: erria
 
 services:
@@ -25,6 +31,11 @@ services:
     # not left to an implicit default someone has to go look up.
     command: ['postgres', '-c', 'shared_buffers=128MB']
     mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
     environment:
       # Only additive here — POSTGRES_USER/PASSWORD/DB keep coming from compose.yaml's own
       # defaults, overridable the same way (see .env.deploy.example). This is the password for
@@ -69,6 +80,11 @@ services:
     # Budget: ~800 MB (issue #57) — JVM heap capped at 512m below, plus JVM/Quarkus overhead on
     # top of the heap. 1024m gives that overhead room without letting one leak threaten the box.
     mem_limit: 1024m
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
@@ -140,6 +156,11 @@ services:
     restart: unless-stopped
     # Budget: ~250 MB (issue #57).
     mem_limit: 384m
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
     environment:
       # Built from the same POSTGRES_* values as the `postgres` service above, rather than
       # repeated as a second literal, so the two cannot disagree the way .env.example warns
@@ -180,6 +201,11 @@ services:
     restart: unless-stopped
     # Budget: ~200 MB (issue #57).
     mem_limit: 320m
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — unlike dev's compose.yaml, a deployed Postgres password has no safe default}@postgres:5432/${POSTGRES_DB:-erria}
       WORKER_PORT: '3100'
@@ -215,6 +241,13 @@ services:
     # 60 MB in local testing — recorded in the PR. 128m keeps real headroom above that measured
     # figure rather than the budget's estimate, which undercounted it.
     mem_limit: 128m
+    # caddy sees every public request, including whatever a scanner or the rate limiter above
+    # is busy rejecting, so it gets one extra rotation over the other services' 3.
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
     # The only service that publishes a host port pair, and it is the only pair published: 80
     # for the ACME HTTP-01 challenge and the redirect to HTTPS, 443 for the app.
     ports:
