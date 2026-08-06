@@ -129,7 +129,7 @@ services:
       # Built from the same POSTGRES_* values as the `postgres` service above, rather than
       # repeated as a second literal, so the two cannot disagree the way .env.example warns
       # dev's DATABASE_URL and compose.yaml's Postgres credentials can.
-      DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — unlike dev's compose.yaml, a deployed Postgres password has no safe default}@postgres:5432/${POSTGRES_DB:-erria_dev}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — unlike dev's compose.yaml, a deployed Postgres password has no safe default}@postgres:5432/${POSTGRES_DB:-erria}
       CONSOLE_API_PORT: '3000'
       WORKER_INTERNAL_URL: http://worker:3100
       # NOT the internal http://keycloak:8080 address: JwtVerifierService (#77) builds the
@@ -166,7 +166,7 @@ services:
     # Budget: ~200 MB (issue #57).
     mem_limit: 320m
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — unlike dev's compose.yaml, a deployed Postgres password has no safe default}@postgres:5432/${POSTGRES_DB:-erria_dev}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-erria}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — unlike dev's compose.yaml, a deployed Postgres password has no safe default}@postgres:5432/${POSTGRES_DB:-erria}
       WORKER_PORT: '3100'
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       MESSAGE_DISPATCH_MODE: ${MESSAGE_DISPATCH_MODE:-sandbox}
