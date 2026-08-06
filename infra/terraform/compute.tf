@@ -37,6 +37,14 @@ resource "azurerm_linux_virtual_machine" "review" {
 
   network_interface_ids = [azurerm_network_interface.review.id]
 
+  # Issue #61: lets deploy/scripts/report-*.sh authenticate to Azure Monitor's custom-metrics
+  # API as this VM, over IMDS, with no credential stored anywhere. See
+  # infra/terraform/monitoring.tf for the role assignment that actually grants it anything —
+  # the identity alone is just an empty principal until that's in place.
+  identity {
+    type = "SystemAssigned"
+  }
+
   # Password auth disabled at the platform level — not merely unconfigured.
   disable_password_authentication = true
 

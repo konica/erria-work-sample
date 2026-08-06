@@ -88,6 +88,24 @@ variable "budget_alert_emails" {
   default     = ["dtrungthao@gmail.com"]
 }
 
+variable "ops_alert_emails" {
+  description = "Email addresses notified by the disk-usage and TLS-expiry alerts (issue #61). Kept separate from budget_alert_emails so ops and spend alerts could go to different lists if that's ever wanted; defaults to the same single address until a second teammate's email is confirmed — the ticket asks for both team members to be alerted."
+  type        = list(string)
+  default     = ["dtrungthao@gmail.com"]
+}
+
+variable "disk_usage_alert_threshold_percent" {
+  description = "Root-filesystem used-percentage that fires the disk alert (issue #61's acceptance criterion is exactly 80%). Postgres data, Docker images and container logs all share this one disk."
+  type        = number
+  default     = 80
+}
+
+variable "tls_expiry_alert_threshold_days" {
+  description = "Days-remaining-until-expiry that fires the TLS alert (issue #61). 14 days gives a full ACME retry window's worth of slack before a Let's Encrypt certificate (90-day validity, renewed automatically by Caddy around day 60) would actually lapse."
+  type        = number
+  default     = 14
+}
+
 variable "tags" {
   description = "Tags applied to every resource this module creates."
   type        = map(string)
