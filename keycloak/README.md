@@ -6,14 +6,18 @@
 
 - **Realm:** `erria`
 - **Clients:**
-  - `console-web` — public client, Authorization Code + PKCE (S256), redirect URI
-    `http://localhost:5173/*`. Direct Access Grants (password grant) is also enabled, purely so a
-    token can be fetched from the command line for testing (see below) without driving a browser
-    through the PKCE dance — not how the SPA itself will log in. `post.logout.redirect.uris` is
-    also set to `http://localhost:5173/*` — Keycloak 18+ rejects RP-initiated logout's
-    `post_logout_redirect_uri` unless it matches an allow-listed value here, and without a match
-    it falls back to its own logout confirmation screen (#76's whole point is that the app never
-    shows that screen).
+  - `console-web` — public client, Authorization Code + PKCE (S256), redirect URIs
+    `http://localhost:5173/*` and `http://127.0.0.1:5173/*` — both loopback aliases are listed
+    because `oidcClient.ts` builds `redirect_uri` from `window.location.origin`, and browsers
+    treat `localhost` and `127.0.0.1` as distinct origins; opening the app via whichever one isn't
+    allow-listed produces Keycloak's "Invalid parameter: redirect_uri" page (#107). Direct Access
+    Grants (password grant) is also enabled, purely so a token can be fetched from the command
+    line for testing (see below) without driving a browser through the PKCE dance — not how the
+    SPA itself will log in. `post.logout.redirect.uris` mirrors the same two origins (as
+    `##`-joined values, Keycloak's multi-value format for that attribute) — Keycloak 18+ rejects
+    RP-initiated logout's `post_logout_redirect_uri` unless it matches an allow-listed value here,
+    and without a match it falls back to its own logout confirmation screen (#76's whole point is
+    that the app never shows that screen).
   - `console-api` — bearer-only. It never initiates a login; it only validates tokens issued to
     `console-web` against this realm's JWKS (wired up in #77).
 - **Realm roles:** `reviewer`, and `admin` (a composite that includes `reviewer` — an admin token
