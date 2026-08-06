@@ -236,4 +236,294 @@ describe('POST /internal/process-trigger/:triggerId', () => {
     expect(userContent).toContain('Song Hong 09');
     expect(userContent).toContain('9765432');
   });
+
+  describe('Tier 1 autonomous send', () => {
+    async function seedTier1Account(withEmail = true) {
+      return testDb.prisma.account.create({
+        data: {
+          companyName: 'Autonomous Co',
+          segment: 'Offshore support vessel operator',
+          hub: 'Haiphong',
+          icpScore: 90,
+          icpBand: 'high',
+          relationshipSummary: 'Earned Tier 1',
+          currentTier: 1,
+          tierRationale: 'Earned',
+          cleanApprovalsCount: 2,
+          contacts: withEmail
+            ? { create: { name: 'Ms. Lan Pham', role: 'Tech Super', email: 'auto@example.com' } }
+            : { create: { name: 'Ms. Lan Pham', role: 'Tech Super' } },
+        },
+      });
+    }
+
+    async function seedTrigger(
+      accountId: string,
+      overrides: { hasComplianceDeadlineContent?: boolean } = {},
+    ) {
+      return testDb.prisma.trigger.create({
+        data: {
+          accountId,
+          category: 'life-raft service window',
+          description: 'test',
+          source: 'public_data',
+          confidenceLabel: 'high',
+          verifiabilityNote: 'test',
+          detectedAt: new Date(),
+          status: 'new',
+          hasComplianceDeadlineContent: overrides.hasComplianceDeadlineContent ?? false,
+        },
+      });
+    }
+
+    function highConfidenceDraft() {
+      return fakeAnthropicClient({
+        should_draft: true,
+        draft_text: 'Hi Ms. Pham, ...',
+        confidence_label: 'high',
+        abstain_reason: null,
+      });
+    }
+
+    it('sends without approval and records the sampled audit row for a first send', async () => {
+      await testDb.prisma.setting.upsert({
+        where: { id: 1 },
+        update: { autonomousSendingEnabled: true, tier1AuditSampleRate: 0 },
+        create: { id: 1, autonomousSendingEnabled: true, tier1AuditSampleRate: 0 },
+      });
+      const account = await seedTier1Account();
+      const trigger = await seedTrigger(account.id);
+      const server = buildServer({
+        prisma: testDb.prisma,
+        anthropic: highConfidenceDraft(),
+        dispatchMode: 'sandbox',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/internal/process-trigger/${trigger.id}`,
+      });
+
+      expect(response.json()).toMatchObject({ status: 'sent_autonomously' });
+
+      const message = await testDb.prisma.message.findFirstOrThrow({
+        where: { triggerId: trigger.id },
+      });
+      expect(message.status).toBe('sent');
+      expect(message.tierContext).toBe(1);
+      expect(message.decidedBy).toBe('system (autonomous)');
+      expect(message.role).toBe('agent_sent');
+
+      // Rate is 0, so only the first-send rule can explain this row existing.
+      const samples = await testDb.prisma.auditSample.findMany({ where: { accountId: account.id } });
+      expect(samples).toHaveLength(1);
+      expect(samples[0].messageId).toBe(message.id);
+    });
+
+    it('does not re-sample a second autonomous send at a rate of 0', async () => {
+      await testDb.prisma.setting.upsert({
+        where: { id: 1 },
+        update: { autonomousSendingEnabled: true, tier1AuditSampleRate: 0 },
+        create: { id: 1, autonomousSendingEnabled: true, tier1AuditSampleRate: 0 },
+      });
+      const account = await seedTier1Account();
+      const server = buildServer({
+        prisma: testDb.prisma,
+        anthropic: highConfidenceDraft(),
+        dispatchMode: 'sandbox',
+      });
+
+      const first = await seedTrigger(account.id);
+      await server.inject({ method: 'POST', url: `/internal/process-trigger/${first.id}` });
+
+      const second = await seedTrigger(account.id);
+      await server.inject({ method: 'POST', url: `/internal/process-trigger/${second.id}` });
+
+      const samples = await testDb.prisma.auditSample.findMany({ where: { accountId: account.id } });
+      expect(samples).toHaveLength(1);
+    });
+
+    it('holds for approval when autonomous sending is paused, keeping the account at Tier 1', async () => {
+      await testDb.prisma.setting.upsert({
+        where: { id: 1 },
+        update: { autonomousSendingEnabled: false },
+        create: { id: 1, autonomousSendingEnabled: false },
+      });
+      const account = await seedTier1Account();
+      const trigger = await seedTrigger(account.id);
+      const server = buildServer({
+        prisma: testDb.prisma,
+        anthropic: highConfidenceDraft(),
+        dispatchMode: 'sandbox',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/internal/process-trigger/${trigger.id}`,
+      });
+
+      expect(response.json()).toMatchObject({ status: 'held_for_approval' });
+
+      const message = await testDb.prisma.message.findFirstOrThrow({
+        where: { triggerId: trigger.id },
+      });
+      expect(message.status).toBe('pending_review');
+      expect(message.tierContext).toBe(2);
+      expect(message.hardRuleFlags).toContain('autonomous_paused_hold');
+
+      const refreshed = await testDb.prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+      expect(refreshed.currentTier).toBe(1);
+    });
+
+    it('holds for approval when the account has an active send-blocking escalation', async () => {
+      await testDb.prisma.setting.upsert({
+        where: { id: 1 },
+        update: { autonomousSendingEnabled: true },
+        create: { id: 1, autonomousSendingEnabled: true },
+      });
+      const account = await seedTier1Account();
+      await testDb.prisma.escalation.create({
+        data: {
+          accountId: account.id,
+          hardTriggerRule: 'negative_sentiment',
+          reasonSummary: 'Buyer asked to stop',
+          detail: 'test',
+          recommendedNextStep: 'Human review',
+          agentSendDisabled: true,
+          status: 'active',
+        },
+      });
+      const trigger = await seedTrigger(account.id);
+      const server = buildServer({
+        prisma: testDb.prisma,
+        anthropic: highConfidenceDraft(),
+        dispatchMode: 'sandbox',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/internal/process-trigger/${trigger.id}`,
+      });
+
+      expect(response.json()).toMatchObject({ status: 'held_for_approval' });
+
+      const message = await testDb.prisma.message.findFirstOrThrow({
+        where: { triggerId: trigger.id },
+      });
+      expect(message.hardRuleFlags).toContain('escalation_hold');
+    });
+
+    it('holds for approval when the message cites a compliance deadline (§4 rule 5)', async () => {
+      await testDb.prisma.setting.upsert({
+        where: { id: 1 },
+        update: { autonomousSendingEnabled: true },
+        create: { id: 1, autonomousSendingEnabled: true },
+      });
+      const account = await seedTier1Account();
+      const trigger = await seedTrigger(account.id, { hasComplianceDeadlineContent: true });
+      const server = buildServer({
+        prisma: testDb.prisma,
+        anthropic: highConfidenceDraft(),
+        dispatchMode: 'sandbox',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/internal/process-trigger/${trigger.id}`,
+      });
+
+      expect(response.json()).toMatchObject({ status: 'held_for_approval' });
+
+      const message = await testDb.prisma.message.findFirstOrThrow({
+        where: { triggerId: trigger.id },
+      });
+      expect(message.hardRuleFlags).toContain('compliance_deadline_content');
+
+      const refreshed = await testDb.prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+      expect(refreshed.currentTier).toBe(1);
+    });
+
+    it('holds for approval on a mid-confidence draft', async () => {
+      await testDb.prisma.setting.upsert({
+        where: { id: 1 },
+        update: { autonomousSendingEnabled: true },
+        create: { id: 1, autonomousSendingEnabled: true },
+      });
+      const account = await seedTier1Account();
+      const trigger = await seedTrigger(account.id);
+      const anthropic = fakeAnthropicClient({
+        should_draft: true,
+        draft_text: 'Hi Ms. Pham, ...',
+        confidence_label: 'mid',
+        abstain_reason: null,
+      });
+      const server = buildServer({ prisma: testDb.prisma, anthropic, dispatchMode: 'sandbox' });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/internal/process-trigger/${trigger.id}`,
+      });
+
+      expect(response.json()).toMatchObject({ status: 'held_for_approval' });
+
+      const message = await testDb.prisma.message.findFirstOrThrow({
+        where: { triggerId: trigger.id },
+      });
+      expect(message.hardRuleFlags).toContain('low_confidence_hold');
+    });
+
+    it('routes to triage when the Tier 1 account has no contact email', async () => {
+      await testDb.prisma.setting.upsert({
+        where: { id: 1 },
+        update: { autonomousSendingEnabled: true },
+        create: { id: 1, autonomousSendingEnabled: true },
+      });
+      const account = await seedTier1Account(false);
+      const trigger = await seedTrigger(account.id);
+      const server = buildServer({
+        prisma: testDb.prisma,
+        anthropic: highConfidenceDraft(),
+        dispatchMode: 'sandbox',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/internal/process-trigger/${trigger.id}`,
+      });
+
+      expect(response.json()).toMatchObject({ status: 'needs_triage' });
+
+      const updated = await testDb.prisma.trigger.findUniqueOrThrow({ where: { id: trigger.id } });
+      expect(updated.status).toBe('needs_triage');
+      expect(await testDb.prisma.message.count({ where: { triggerId: trigger.id } })).toBe(0);
+    });
+
+    it('drafts for approval as before when the account is Tier 2, even with autonomous sending enabled', async () => {
+      await testDb.prisma.setting.upsert({
+        where: { id: 1 },
+        update: { autonomousSendingEnabled: true },
+        create: { id: 1, autonomousSendingEnabled: true },
+      });
+      const account = await createAccount('Still Tier 2 Co');
+      const trigger = await createTrigger(account.id, 'life-raft service window');
+      const server = buildServer({
+        prisma: testDb.prisma,
+        anthropic: highConfidenceDraft(),
+        dispatchMode: 'sandbox',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/internal/process-trigger/${trigger.id}`,
+      });
+
+      expect(response.json()).toMatchObject({ status: 'drafted' });
+
+      const message = await testDb.prisma.message.findFirstOrThrow({
+        where: { triggerId: trigger.id },
+      });
+      expect(message.status).toBe('pending_review');
+      expect(message.tierContext).toBe(2);
+    });
+  });
 });
