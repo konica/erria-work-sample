@@ -140,4 +140,67 @@ describe('SettingsService', () => {
       expect(stored.tier1AuditSampleRate).toBe(30);
     });
   });
+
+  describe('autonomous kill switch', () => {
+    it('defaults to paused (off), with no reason, on first read', async () => {
+      const service = new SettingsService(testDb.prisma);
+
+      const result = await service.read();
+
+      expect(result.autonomous.enabled).toBe(false);
+      expect(result.autonomous.pauseReason).toBeNull();
+    });
+
+    it('pauses immediately, with no confirmation step, recording the reason', async () => {
+      const service = new SettingsService(testDb.prisma);
+      await service.confirmResumeAutonomous();
+
+      const result = await service.pauseAutonomous('Tone drift spotted on three sends');
+
+      expect(result.autonomous.enabled).toBe(false);
+      expect(result.autonomous.pauseReason).toBe('Tone drift spotted on three sends');
+
+      const stored = await testDb.prisma.setting.findUniqueOrThrow({ where: { id: 1 } });
+      expect(stored.autonomousSendingEnabled).toBe(false);
+    });
+
+    it('requires a reason to pause, so a paused system explains itself', async () => {
+      const service = new SettingsService(testDb.prisma);
+
+      await expect(service.pauseAutonomous('   ')).rejects.toThrow(/reason/i);
+    });
+
+    it('proposing a resume changes nothing and returns the confirmation notice', async () => {
+      const service = new SettingsService(testDb.prisma);
+      await service.pauseAutonomous('paused for the test');
+
+      const proposal = await service.proposeResumeAutonomous();
+
+      expect(proposal.requiresConfirmation).toBe(true);
+      expect(proposal.notice).toMatch(/without a human reading/i);
+
+      const stored = await testDb.prisma.setting.findUniqueOrThrow({ where: { id: 1 } });
+      expect(stored.autonomousSendingEnabled).toBe(false);
+    });
+
+    it('confirming a resume enables sending and clears the pause reason', async () => {
+      const service = new SettingsService(testDb.prisma);
+      await service.pauseAutonomous('paused for the test');
+
+      const result = await service.confirmResumeAutonomous();
+
+      expect(result.autonomous.enabled).toBe(true);
+      expect(result.autonomous.pauseReason).toBeNull();
+    });
+
+    it('reports the switch state through the normal settings read', async () => {
+      const service = new SettingsService(testDb.prisma);
+      await service.pauseAutonomous('visible in read');
+
+      const settings = await service.read();
+
+      expect(settings.autonomous.enabled).toBe(false);
+      expect(settings.autonomous.pauseReason).toBe('visible in read');
+    });
+  });
 });

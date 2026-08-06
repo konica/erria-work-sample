@@ -11,7 +11,7 @@ export interface DispatchMessageInput {
 export type DispatchMessageResult =
   | { messageId: string; status: 'sent'; sentAt: Date; cleanApprovalCounted: boolean }
   | { messageId: string; status: 'already_sent' }
-  | { messageId: string; status: 'refused'; reason: 'not_approved' | 'escalated' }
+  | { messageId: string; status: 'refused'; reason: 'not_approved' | 'escalated' | 'autonomous_sending_paused' }
   | { messageId: string; status: 'unsendable'; reason: 'no_contact_email' }
   | { messageId: string; status: 'not_found' };
 
@@ -55,6 +55,16 @@ export async function dispatchMessage(
 
   if (message.status !== 'approved') {
     return { messageId: message.id, status: 'refused', reason: 'not_approved' };
+  }
+
+  // The kill switch stops autonomous sending specifically, not the send queue: it is re-checked
+  // here so a pause also stops a message already in flight, but a message a human explicitly
+  // approved is still theirs to send and must not be stranded by it.
+  if (message.decidedBy === 'system (autonomous)') {
+    const settings = await deps.prisma.setting.findUnique({ where: { id: 1 } });
+    if (!settings?.autonomousSendingEnabled) {
+      return { messageId: message.id, status: 'refused', reason: 'autonomous_sending_paused' };
+    }
   }
 
   // Re-checked here, not just at approval time: an escalation can open in the window between a

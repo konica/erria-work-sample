@@ -1376,7 +1376,7 @@ git commit -m "feat(worker): send autonomously for earned Tier 1 accounts behind
   `PUT /api/settings/autonomous/resume` → `{ requiresConfirmation, notice }`,
   `POST /api/settings/autonomous/resume/confirm` (applies) — consumed by Task 10.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `apps/console-api/src/settings/settings.service.integration.spec.ts`:
 
@@ -1436,12 +1436,12 @@ describe('SettingsService autonomous kill switch', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter console-api exec vitest run src/settings/settings.service.integration.spec.ts`
 Expected: FAIL — `pauseAutonomous` is not a function.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `apps/console-api/src/settings/dto/pause-autonomous.dto.ts`:
 
@@ -1527,13 +1527,13 @@ Add to `SettingsController` (`BadRequestException` and `PauseAutonomousDto` impo
   }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `pnpm --filter console-api exec vitest run src/settings/settings.service.integration.spec.ts`
 Expected: PASS — 5 new tests plus Plan 4's 9. Plan 4's `read()` tests still pass; they assert on
 `basic`/`advanced`/`locked` and are unaffected by the added `autonomous` key.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/console-api
@@ -2206,7 +2206,7 @@ Pausing must stop messages already in flight, not only future ones. An autonomou
 dispatch as `approved` with a system decider, so without this check a pause would let anything
 already drafted continue.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `apps/worker/src/routes/dispatch-message.integration.spec.ts`:
 
@@ -2258,12 +2258,12 @@ Add to `apps/worker/src/routes/dispatch-message.integration.spec.ts`:
 The second test is the one that matters most: the kill switch stops *autonomous* sending, and must
 not strand messages a human explicitly approved.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter worker exec vitest run src/routes/dispatch-message.integration.spec.ts`
 Expected: FAIL — the paused autonomous message dispatches.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `apps/worker/src/routes/dispatch-message.ts`, after the escalation guard:
 
@@ -2278,12 +2278,12 @@ In `apps/worker/src/routes/dispatch-message.ts`, after the escalation guard:
       }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `pnpm --filter worker exec vitest run src/routes/dispatch-message.integration.spec.ts`
 Expected: PASS — 2 new tests plus Plan 2's 5.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/worker
@@ -2304,7 +2304,7 @@ git commit -m "feat(worker): dispatch re-checks the kill switch for autonomous m
 - Consumes: the Task 7 endpoints, `Message.hardRuleFlags` from Tasks 6 and 8.
 - Produces: the operator-facing surface — the last piece of this plan.
 
-- [ ] **Step 1: Add the API calls**
+- [x] **Step 1: Add the API calls**
 
 Append to `apps/console-web/src/api.ts`:
 
@@ -2336,7 +2336,7 @@ export const autonomousApi = {
 
 Also add `autonomous: AutonomousState;` to the `SettingsPayload` interface.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Add to `apps/console-web/src/SettingsPage.test.tsx`, and add
 `autonomous: { enabled: true, pauseReason: null }` to the existing `settings` fixture:
@@ -2372,12 +2372,12 @@ Add to `apps/console-web/src/SettingsPage.test.tsx`, and add
   });
 ```
 
-- [ ] **Step 3: Run to verify it fails**
+- [x] **Step 3: Run to verify it fails**
 
 Run: `pnpm --filter console-web exec vitest run src/SettingsPage.test.tsx`
 Expected: FAIL — there is no pause control.
 
-- [ ] **Step 4: Implement the switch control**
+- [x] **Step 4: Implement the switch control**
 
 Add to `apps/console-web/src/SettingsPage.tsx`, as the first section (it is the highest-consequence
 control on the page, so it goes at the top):
@@ -2462,7 +2462,7 @@ with the accompanying state at the top of the component:
   const [resumeNotice, setResumeNotice] = useState<string | null>(null);
 ```
 
-- [ ] **Step 5: Show why a message is held**
+- [x] **Step 5: Show why a message is held**
 
 In `apps/console-web/src/AccountDetailPage.tsx`, add `hardRuleFlags: string[] | null` to the
 `pendingMessage` shape in `api.ts`, and render an explanation above the draft body:
@@ -2488,7 +2488,7 @@ function holdExplanation(flags: string[]): string {
 }
 ```
 
-- [ ] **Step 6: Run to verify it passes**
+- [x] **Step 6: Run to verify it passes**
 
 Run: `pnpm --filter console-web exec vitest run`
 Expected: PASS — 2 new settings tests plus every page test from Plans 1-4.
@@ -2501,7 +2501,7 @@ account you have manually set to Tier 1 with a contact email, and confirm the wo
 POST another trigger, and confirm that one *does* appear in the queue with the
 "autonomous sending is currently paused" explanation.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/console-web

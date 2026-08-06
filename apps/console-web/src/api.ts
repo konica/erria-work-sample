@@ -29,7 +29,13 @@ export interface AccountDetail {
   };
   vessels: { id: string; name: string; imo: string; flag: string }[];
   contacts: { id: string; name: string; role: string; email: string | null }[];
-  pendingMessage: { id: string; body: string; edited: boolean; tierContext: number } | null;
+  pendingMessage: {
+    id: string;
+    body: string;
+    edited: boolean;
+    tierContext: number;
+    hardRuleFlags: string[] | null;
+  } | null;
 }
 
 export interface TierHistoryItem {
@@ -40,6 +46,11 @@ export interface TierHistoryItem {
   reason: string;
   occurredAt: string;
   isManual: boolean;
+}
+
+export interface AutonomousState {
+  enabled: boolean;
+  pauseReason: string | null;
 }
 
 export interface SettingsPayload {
@@ -54,6 +65,12 @@ export interface SettingsPayload {
     rolloutOverlayEnabled: boolean;
     rolloutOverlayDescription: string;
   };
+  autonomous: AutonomousState;
+}
+
+export interface ResumeProposal {
+  requiresConfirmation: boolean;
+  notice: string;
 }
 
 export interface AdvancedSettingsProposal {
@@ -109,6 +126,19 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(advanced),
     }).then(json<SettingsPayload>),
+
+  pauseAutonomous: (reason: string) =>
+    apiFetch('/api/settings/autonomous/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    }).then(json<SettingsPayload>),
+
+  proposeResumeAutonomous: () =>
+    apiFetch('/api/settings/autonomous/resume', { method: 'PUT' }).then(json<ResumeProposal>),
+
+  confirmResumeAutonomous: () =>
+    apiFetch('/api/settings/autonomous/resume/confirm', { method: 'POST' }).then(json<SettingsPayload>),
 };
 
 export const tierHistoryApi = {

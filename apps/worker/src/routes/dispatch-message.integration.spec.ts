@@ -109,6 +109,46 @@ describe('POST /internal/dispatch-message/:messageId', () => {
     expect(response.json()).toMatchObject({ status: 'refused', reason: 'escalated' });
   });
 
+  it('refuses to dispatch an autonomous message once autonomous sending is paused', async () => {
+    await testDb.prisma.setting.upsert({
+      where: { id: 1 },
+      update: { autonomousSendingEnabled: false, autonomousPauseReason: 'paused mid-flight' },
+      create: { id: 1, autonomousSendingEnabled: false, autonomousPauseReason: 'paused mid-flight' },
+    });
+    const { message } = await seedApprovedMessage();
+    await testDb.prisma.message.update({
+      where: { id: message.id },
+      data: { tierContext: 1, decidedBy: 'system (autonomous)' },
+    });
+    const server = buildServer({ prisma: testDb.prisma, anthropic: {} as never, dispatchMode: 'sandbox' });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: `/internal/dispatch-message/${message.id}`,
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ status: 'refused', reason: 'autonomous_sending_paused' });
+  });
+
+  it('still dispatches a human-approved message while autonomous sending is paused', async () => {
+    await testDb.prisma.setting.upsert({
+      where: { id: 1 },
+      update: { autonomousSendingEnabled: false },
+      create: { id: 1, autonomousSendingEnabled: false },
+    });
+    const { message } = await seedApprovedMessage();
+    const server = buildServer({ prisma: testDb.prisma, anthropic: {} as never, dispatchMode: 'sandbox' });
+
+    const response = await server.inject({
+      method: 'POST',
+      url: `/internal/dispatch-message/${message.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: 'sent' });
+  });
+
   it('returns 422 when the account has no contact email to send to', async () => {
     const { message } = await seedApprovedMessage(null);
     const server = buildServer({ prisma: testDb.prisma, anthropic: {} as never, dispatchMode: 'sandbox' });

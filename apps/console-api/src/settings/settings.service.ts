@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@erria/db';
 import { LOCKED_POLICY } from '@erria/domain';
 import { PRISMA } from '../prisma/prisma.module.js';
@@ -72,6 +72,46 @@ export class SettingsService {
     return this.present(updated);
   }
 
+  /**
+   * Deliberately immediate and unconfirmed. An emergency stop that asks "are you sure?" is a worse
+   * emergency stop — someone who has just spotted a problem across several sends should be one
+   * action away from stopping it.
+   */
+  async pauseAutonomous(reason: string) {
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      throw new BadRequestException(
+        'A reason is required — whoever finds the system paused should be able to see why without asking',
+      );
+    }
+    await this.ensureRow();
+    const updated = await this.prisma.setting.update({
+      where: { id: SETTINGS_ID },
+      data: { autonomousSendingEnabled: false, autonomousPauseReason: trimmed },
+    });
+    return this.present(updated);
+  }
+
+  /** Dry run — resuming is the direction that can cause harm, so it takes the confirmation step. */
+  async proposeResumeAutonomous() {
+    await this.ensureRow();
+    return {
+      requiresConfirmation: true,
+      notice:
+        'Resuming lets Tier 1 accounts send without a human reading the message first. It applies ' +
+        'to outreach going forward; messages already queued for approval stay queued.',
+    };
+  }
+
+  async confirmResumeAutonomous() {
+    await this.ensureRow();
+    const updated = await this.prisma.setting.update({
+      where: { id: SETTINGS_ID },
+      data: { autonomousSendingEnabled: true, autonomousPauseReason: null },
+    });
+    return this.present(updated);
+  }
+
   /** Defaults live here and in the Prisma schema's @default — spec §11's stated values. */
   private async ensureRow() {
     return this.prisma.setting.upsert({
@@ -93,6 +133,10 @@ export class SettingsService {
         sentimentConfidenceFloor: settings.sentimentConfidenceFloor,
       },
       locked: LOCKED_POLICY,
+      autonomous: {
+        enabled: settings.autonomousSendingEnabled,
+        pauseReason: settings.autonomousPauseReason,
+      },
     };
   }
 }

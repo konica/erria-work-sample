@@ -51,15 +51,20 @@ export async function reconcileStuckSends(
 
 function reasonFor(
   outcome:
-    | { status: 'refused'; reason: 'not_approved' | 'escalated' }
+    | { status: 'refused'; reason: 'not_approved' | 'escalated' | 'autonomous_sending_paused' }
     | { status: 'unsendable'; reason: 'no_contact_email' }
     | { status: 'not_found' },
 ): string {
   switch (outcome.status) {
     case 'refused':
-      return outcome.reason === 'escalated'
-        ? 'Approved message could not be sent — the account escalated before the retry ran.'
-        : 'Approved message could not be sent — it is no longer in approved status.';
+      switch (outcome.reason) {
+        case 'escalated':
+          return 'Approved message could not be sent — the account escalated before the retry ran.';
+        case 'autonomous_sending_paused':
+          return 'Approved message could not be sent — autonomous sending was paused before the retry ran.';
+        default:
+          return 'Approved message could not be sent — it is no longer in approved status.';
+      }
     case 'unsendable':
       return 'Approved message could not be sent — no contact email on this account.';
     case 'not_found':

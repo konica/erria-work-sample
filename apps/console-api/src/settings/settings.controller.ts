@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Put, UseGuards } from '@nestjs/common';
 import { SettingsService } from './settings.service.js';
 import { SaveBasicSettingsDto } from './dto/save-basic-settings.dto.js';
 import { SaveAdvancedSettingsDto } from './dto/save-advanced-settings.dto.js';
+import { PauseAutonomousDto } from './dto/pause-autonomous.dto.js';
 import { Roles } from '../auth/roles.decorator.js';
 import { RolesGuard } from '../auth/roles.guard.js';
 
@@ -31,5 +32,20 @@ export class SettingsController {
   @Post('advanced/confirm')
   async confirmAdvanced(@Body() dto: SaveAdvancedSettingsDto) {
     return this.settingsService.confirmAdvanced(dto);
+  }
+
+  @Post('autonomous/pause')
+  async pauseAutonomous(@Body() dto: PauseAutonomousDto) {
+    return this.settingsService.pauseAutonomous(dto.reason);
+  }
+
+  @Put('autonomous/resume')
+  async proposeResumeAutonomous() {
+    return this.settingsService.proposeResumeAutonomous();
+  }
+
+  @Post('autonomous/resume/confirm')
+  async confirmResumeAutonomous() {
+    return this.settingsService.confirmResumeAutonomous();
   }
 }
