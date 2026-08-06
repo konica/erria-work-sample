@@ -1,0 +1,254 @@
+---
+# Installs the tools infra/scripts/quickstart.sh shells out to, so a new machine can run the
+# Azure provisioning walkthrough in infra/terraform/README.md without hand-assembling apt repos.
+#
+# Targets an *operator workstation*, not the review VM — the VM gets its own software from
+# infra/terraform/cloud-init.yaml.tftpl, and nothing here touches it.
+#
+# Only `az` and `terraform` are genuinely hard to install (both need third-party apt repos); the
+# rest of quickstart.sh's dependencies are listed explicitly anyway so a bare machine ends up
+# runnable in one pass rather than failing halfway through the script on a missing `jq`.
+#
+# This installs tools only. It does not log in to Azure and does not provision anything — see
+# "Why this stays human-run" in infra/terraform/README.md.
+#
+# Usage: see infra/ansible/README.md.
+
+- name: Install Azure provisioning tools for infra/scripts/quickstart.sh
+  hosts: provisioning_workstations
+  become: true
+
+  vars:
+    # Matches .github/workflows/terraform-plan.yml's `terraform_version`, deliberately: a laptop
+    # should produce the same plan CI does. infra/terraform/versions.tf only requires >= 1.9, but
+    # a *newer* local Terraform rewrites .terraform.lock.hcl and state in ways CI's older binary
+    # then refuses to read. If you bump one, bump the other.
+    terraform_version: "1.9.8"
+
+    # Used only when packages.microsoft.com has no build for the host's own release — see the
+    # probe task below for why that happens and why this isn't just hardcoded.
+    azure_cli_fallback_suite: noble
+
+    hashicorp_key_url: https://apt.releases.hashicorp.com/gpg
+    hashicorp_repo_url: https://apt.releases.hashicorp.com
+    microsoft_key_url: https://packages.microsoft.com/keys/microsoft.asc
+    microsoft_azure_cli_repo_url: https://packages.microsoft.com/repos/azure-cli/
+
+    # quickstart.sh / bootstrap-state.sh call these directly. `jq` parses `az account show` and
+    # `terraform output -json`; ssh-keygen/ssh-keyscan come from openssh-client and are needed for
+    # the admin key and DEPLOY_SSH_KNOWN_HOSTS respectively.
+    base_packages:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - jq
+      - openssh-client
+      - unzip
+
+  pre_tasks:
+    # Chicken-and-egg: ansible.builtin.apt and apt_repository are both implemented against the
+    # python3-apt bindings. The apt module can auto-install them when run normally, but NOT under
+    # --check (it fails outright), and apt_repository never does. `raw` needs no bindings at all,
+    # so it is the one thing that can break the cycle. check_mode: false so a --check run also
+    # gets working modules instead of a spurious failure.
+    - name: Check whether the python3-apt bindings are importable
+      ansible.builtin.raw: "{{ ansible_python_interpreter | default('/usr/bin/python3') }} -c 'import apt'"
+      register: python3_apt_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Bootstrap python3-apt (required by the apt and apt_repository modules)
+      ansible.builtin.raw: >-
+        apt-get update &&
+        DEBIAN_FRONTEND=noninteractive apt-get install -y python3-apt
+      when: python3_apt_check.rc != 0
+      changed_when: true
+      check_mode: false
+
+  tasks:
+    # Fail loudly and early rather than half-installing: everything below is apt-specific, and
+    # there is no meaningful partial success on a RHEL or macOS host.
+    - name: Assert this is a Debian-family host
+      ansible.builtin.assert:
+        that: ansible_facts['os_family'] == "Debian"
+        fail_msg: >-
+          This playbook installs azure-cli and terraform from the Microsoft and HashiCorp *apt*
+          repositories, so it only supports Debian-family hosts (found
+          ansible_facts['os_family']={{ ansible_facts['os_family'] }}). On macOS use Homebrew
+          (`brew install azure-cli terraform`); on RHEL-family hosts use the vendors' yum repos.
+        success_msg: "{{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }} ({{ ansible_facts['distribution_release'] }})"
+
+    - name: Install base packages quickstart.sh depends on
+      ansible.builtin.apt:
+        name: "{{ base_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # Mirrors the convention already used for Docker's repo in
+    # infra/terraform/cloud-init.yaml.tftpl: keys land in /etc/apt/keyrings as ASCII-armored .asc
+    # and are referenced directly by signed-by. apt has accepted armored keys there since 22.04,
+    # so there is no gpg --dearmor step to get wrong, and the key stays greppable on disk.
+    - name: Ensure /etc/apt/keyrings exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the HashiCorp apt signing key
+      ansible.builtin.get_url:
+        url: "{{ hashicorp_key_url }}"
+        dest: /etc/apt/keyrings/hashicorp.asc
+        owner: root
+        group: root
+        mode: "0644"
+
+    # HashiCorp publishes for current Ubuntu releases promptly, so the host's own codename is
+    # used with no fallback. If this ever 404s, `apt-get update` says so plainly.
+    - name: Add the HashiCorp apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else 'arm64' }}
+          signed-by=/etc/apt/keyrings/hashicorp.asc]
+          {{ hashicorp_repo_url }} {{ ansible_facts['distribution_release'] }} main
+        filename: hashicorp
+        state: present
+        update_cache: true
+
+    # packages.microsoft.com lags new Ubuntu releases by months, and both Microsoft's documented
+    # copy-paste line and `curl -sL https://aka.ms/InstallAzureCLIDeb | bash` derive the suite
+    # from the host's codename — so on a too-new release they silently point apt at a 404 and the
+    # install fails with a confusing "Release file not found" rather than "unsupported release".
+    # Probing first means the common case (a supported release) uses its own native suite and
+    # only a genuinely unpublished one falls back. That also makes this self-healing: the day
+    # Microsoft publishes the host's release, it switches over with no edit here.
+    - name: Probe packages.microsoft.com for a build matching this release
+      ansible.builtin.uri:
+        url: "{{ microsoft_azure_cli_repo_url }}dists/{{ ansible_facts['distribution_release'] }}/Release"
+        method: HEAD
+        status_code: [200, 404]
+      register: azure_cli_suite_probe
+      changed_when: false
+      check_mode: false
+
+    - name: Select the azure-cli apt suite
+      ansible.builtin.set_fact:
+        azure_cli_suite: >-
+          {{ ansible_facts['distribution_release'] if azure_cli_suite_probe.status == 200
+             else azure_cli_fallback_suite }}
+
+    - name: Report which azure-cli suite was selected
+      ansible.builtin.debug:
+        msg: >-
+          {% if azure_cli_suite_probe.status == 200 %}
+          packages.microsoft.com publishes '{{ ansible_facts['distribution_release'] }}' — using it directly.
+          {% else %}
+          packages.microsoft.com has no build for '{{ ansible_facts['distribution_release'] }}' (HTTP 404);
+          falling back to '{{ azure_cli_fallback_suite }}'. The azure-cli package is Python plus a
+          bundled interpreter, so an older-LTS build runs fine here; override with
+          -e azure_cli_fallback_suite=<suite> if that ever stops being true.
+          {% endif %}
+
+    - name: Install the Microsoft apt signing key
+      ansible.builtin.get_url:
+        url: "{{ microsoft_key_url }}"
+        dest: /etc/apt/keyrings/microsoft.asc
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Add the azure-cli apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else 'arm64' }}
+          signed-by=/etc/apt/keyrings/microsoft.asc]
+          {{ microsoft_azure_cli_repo_url }} {{ azure_cli_suite }} main
+        filename: azure-cli
+        state: present
+        update_cache: true
+
+    # Everything from here down is skipped under --check, deliberately. In check mode the two
+    # apt_repository tasks above only *report* the sources they would write, so apt's cache still
+    # has no azure-cli or terraform to resolve, and these tasks would fail with a misleading "No
+    # package matching 'azure-cli' is available" — a check-mode artifact, not a real problem with
+    # the host. Skipping keeps `--check` an honest pass that validates the repo wiring (see the
+    # --diff output for the exact sources lines) without inventing a package-resolution result it
+    # cannot actually determine.
+    - name: Note what a check-mode run cannot verify
+      ansible.builtin.debug:
+        msg: >-
+          Check mode: repository wiring validated above, but package installation and version
+          verification are skipped — apt cannot resolve azure-cli or terraform until the
+          repositories are really written. Re-run without --check to install.
+      when: ansible_check_mode
+
+    - name: Install the Azure CLI
+      ansible.builtin.apt:
+        name: azure-cli
+        state: present
+      when: not ansible_check_mode
+
+    # HashiCorp's packages carry a packaging suffix (1.9.8-1), hence the glob rather than an
+    # exact match. allow_downgrade and allow_change_held_packages let a deliberate
+    # `-e terraform_version=...` move the pin in either direction despite the hold set below.
+    - name: Install Terraform {{ terraform_version }}
+      ansible.builtin.apt:
+        name: "terraform={{ terraform_version }}-*"
+        state: present
+        allow_downgrade: true
+        allow_change_held_packages: true
+      when: not ansible_check_mode
+
+    # Without this, a routine `apt upgrade` silently drifts the workstation off the version CI
+    # pins, which is exactly the mismatch the pin above exists to prevent.
+    - name: Hold Terraform at the pinned version
+      ansible.builtin.dpkg_selections:
+        name: terraform
+        selection: hold
+      when: not ansible_check_mode
+
+  # All guarded on `not ansible_check_mode` for the same reason as the install tasks: under
+  # --check the binaries were never installed, so running them would report a failure about the
+  # dry run itself rather than about the host.
+  post_tasks:
+    # Prove the install rather than trusting apt's exit code — this is the same pair of binaries
+    # quickstart.sh invokes, run the same way.
+    - name: Check the installed Terraform version
+      ansible.builtin.command: terraform version -json
+      register: terraform_version_output
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Assert Terraform matches the pinned version
+      ansible.builtin.assert:
+        that: (terraform_version_output.stdout | from_json).terraform_version == terraform_version
+        fail_msg: >-
+          Expected Terraform {{ terraform_version }} but found
+          {{ (terraform_version_output.stdout | from_json).terraform_version }}.
+        success_msg: "terraform {{ terraform_version }}"
+      when: not ansible_check_mode
+
+    # `az version` is the real test of the suite fallback: a mismatched build fails here, on the
+    # bundled Python interpreter, rather than at apt time.
+    - name: Check the Azure CLI runs
+      ansible.builtin.command: az version
+      register: az_version_output
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Report what quickstart.sh still needs from a human
+      when: not ansible_check_mode
+      ansible.builtin.debug:
+        msg:
+          - "az {{ (az_version_output.stdout | from_json)['azure-cli'] }} and terraform {{ terraform_version }} are installed."
+          - "Still required, and deliberately not automated here:"
+          - "  1. An RSA keypair — Azure rejects ed25519 for VM provisioning:"
+          - "       ssh-keygen -t rsa -b 4096 -f ~/.ssh/erria-review"
+          - "  2. az login, against the target subscription."
+          - "  3. infra/terraform/terraform.tfvars — quickstart.sh creates it from the example"
+          - "     on a first run and stops on purpose; fill it in and re-run."
+          - "Then: az login && infra/scripts/quickstart.sh"
