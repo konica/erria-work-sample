@@ -22,6 +22,7 @@ export interface AccountDetail {
     companyName: string;
     segment: string;
     hub: string;
+    icpScore: number;
     icpBand: 'high' | 'med' | 'low';
     relationshipSummary: string;
     currentTier: number;
@@ -35,6 +36,8 @@ export interface AccountDetail {
     edited: boolean;
     tierContext: number;
     hardRuleFlags: string[] | null;
+    confidenceLabel: 'high' | 'mid' | 'low' | null;
+    verifiabilityNote: string | null;
   } | null;
 }
 
