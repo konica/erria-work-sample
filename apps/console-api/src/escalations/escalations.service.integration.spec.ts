@@ -239,6 +239,38 @@ describe('EscalationsService', () => {
       actionTaken: 'Handled by phone',
       outcomeTag: 'closed_no_action',
       rule: 'pricing_question',
+      timeToResolution: '1m',
+      followupSentAt: null,
     });
+  });
+
+  it('reports followupSentAt on a prior resolution that sent a follow-up', async () => {
+    const { account, escalation } = await seedActiveEscalation();
+    const service = new EscalationsService(testDb.prisma, { dispatchMessage: async () => {} } as never);
+    await service.resolve(
+      account.id,
+      escalation.id,
+      {
+        actionType: 'compose_send',
+        actionTaken: 'Sent an indicative quote',
+        followupBody: 'Thanks for asking — here is an indicative range...',
+        outcomeTag: 're_engaged',
+      },
+      'Minh Tran',
+    );
+
+    const result = await service.priorResolutions(account.id);
+
+    expect(result.items).toHaveLength(1);
+    expect(typeof result.items[0].followupSentAt).toBe('string');
+  });
+
+  it('returns an empty list for an account with no resolved escalations', async () => {
+    const { account } = await seedActiveEscalation();
+    const service = new EscalationsService(testDb.prisma, { dispatchMessage: async () => {} } as never);
+
+    const result = await service.priorResolutions(account.id);
+
+    expect(result.items).toEqual([]);
   });
 });
