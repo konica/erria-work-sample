@@ -5,8 +5,9 @@
 #
 #   1. pull
 #   2. migrate (abort here on failure — the previous containers are untouched and keep serving)
-#   3. up -d
-#   4. health check the public URL
+#   3. render the Keycloak realm import file (issue #132)
+#   4. up -d
+#   5. health check the public URL
 #
 # Also the local rehearsal script: deploy/README.md's manual runbook and this file run the same
 # commands, so testing this locally (docs/adr/0008 and the PR for #58 record such a run) exercises
@@ -14,8 +15,7 @@
 #
 # Requires DEPLOY_IMAGE_TAG (the commit SHA to deploy) and DEPLOY_DOMAIN (the host to health-check)
 # already exported, and every other compose.deploy.yaml variable (POSTGRES_PASSWORD, etc.) already
-# sourced from .env — this script reads no file itself, so it behaves identically whether a human
-# or deploy.yml invokes it.
+# sourced from .env.
 
 set -euo pipefail
 
@@ -53,7 +53,23 @@ then
   exit 1
 fi
 
-echo "==> Migration succeeded. Starting the new containers."
+echo "==> Migration succeeded."
+
+echo "==> Rendering the Keycloak realm import file for $DEPLOY_DOMAIN"
+# Keycloak's realm importer does not resolve ${env.*} placeholders inside client fields like
+# redirectUris/webOrigins (deploy/README.md — verified empirically, it fails the whole import),
+# so this plain `sed` on the committed template has to happen out here rather than inside the
+# container. Previously only deploy/README.md's manual runbook did this render, despite this
+# script's own header claiming parity with that runbook — the CI-driven path (deploy.yml → this
+# script) skipped it, so on a VM where no human had ever run the render by hand, `docker compose`
+# bind-mounted a nonexistent host file and silently got an empty directory in the container
+# instead (issue #132): Keycloak booted fine and served its default `master` realm, but the
+# `erria` realm was never imported. Re-rendering on every deploy (not just once) keeps this file
+# in sync with the template and DEPLOY_DOMAIN with no separate step to forget.
+sed "s|DEPLOY_ORIGIN_PLACEHOLDER|https://${DEPLOY_DOMAIN}|g" \
+  keycloak/realm-export.deploy.json.template > keycloak/realm-export.deploy.json
+
+echo "==> Starting the new containers."
 "${COMPOSE[@]}" up -d --wait
 
 echo "==> Health-checking https://$DEPLOY_DOMAIN/health"

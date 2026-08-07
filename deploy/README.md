@@ -27,6 +27,9 @@ set -a && . ./.env && set +a
 # resolve ${env.*} placeholders inside client fields like redirectUris/webOrigins (verified
 # empirically — it fails the whole import), so this is a plain `sed` on the committed
 # template, done here rather than inside the container. The rendered file is gitignored.
+# `deploy/deploy.sh` (the CI-driven path below) runs this same render on every deploy too
+# (issue #132) — a VM that only ever went through that path never needed this manual step, but
+# it's included here so the fully-manual sequence stays self-contained.
 sed "s|DEPLOY_ORIGIN_PLACEHOLDER|https://${DEPLOY_DOMAIN}|g" \
   keycloak/realm-export.deploy.json.template > keycloak/realm-export.deploy.json
 
@@ -66,9 +69,9 @@ Merging to `main` runs `publish.yml` (builds and pushes `console-api`/`worker` t
 the commit SHA — never `latest`; path-filtered per app so an unrelated app's sources don't trigger
 a rebuild, with a registry-side retag when a rebuild is skipped so the SHA tag still exists for the
 step below to pull), then `deploy.yml` SSHes to the VM and runs `deploy/deploy.sh`, which is the
-same pull → migrate → up -d → health-check sequence documented above, with one load-bearing
-property: **a failed migration aborts before `up -d`**, so the previous containers keep serving
-rather than the deploy limping forward on a schema neither revision fully matches.
+same pull → migrate → render realm → up -d → health-check sequence documented above, with one
+load-bearing property: **a failed migration aborts before `up -d`**, so the previous containers
+keep serving rather than the deploy limping forward on a schema neither revision fully matches.
 
 `deploy.yml` needs these set once the VM exists (#56), under
 **Settings → Secrets and variables → Actions**:
