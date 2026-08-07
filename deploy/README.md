@@ -180,12 +180,24 @@ it seeds **no users** — per #59, reviewer/admin accounts on the public deploym
 hand through the admin console once the realm exists, each a distinct account with its own
 password, never a fixture-seeded default.
 
-The realm's `CONFIGURE_TOTP` required action is a **default action** (verified locally against
-this exact template — see the PR), so the first login of any hand-created account is forced
-through OTP enrollment before it reaches the app; there is no separate "make this account use
-MFA" step. Every account in this realm can approve a send (`reviewer` and `admin` both can —
-`messages.controller.ts` has no role restriction on approve/reject), so requiring OTP for the
-whole realm is exactly "MFA for any account that can approve a send," not a broader ask.
+**MFA is not enforced on this realm.** `CONFIGURE_TOTP` is `enabled` but **not** a default action
+(#139), so no account is pushed through OTP enrollment — an individual can still turn on OTP from
+their own account page, but nothing requires it.
+
+This supersedes #59's MFA acceptance criterion, which had `CONFIGURE_TOTP` as a default action on
+the reasoning that every account in this realm can approve a send (`reviewer` and `admin` both
+can — `messages.controller.ts` puts no role restriction on approve/reject), so realm-wide OTP was
+exactly "MFA for anyone who can approve a send". That reasoning still holds; the MVP is accepting
+the trade-off anyway.
+
+What makes that defensible is `MESSAGE_DISPATCH_MODE=sandbox`: an approval persists a `Message`
+and calls nothing external, so an account that gets taken over cannot email a real customer.
+**That is the load-bearing assumption, and it is the thing to re-check — not this paragraph — if
+the decision is ever revisited.** Turning dispatch to `graph` (#63) makes approvals real Microsoft
+Graph sends, and MFA should come back before that switch is flipped, not after.
+
+`bruteForceProtected` and the lockout policy are unchanged and still apply — they are a separate
+control from MFA.
 
 ### Creating reviewer/admin accounts (admin console, over the SSH tunnel)
 
@@ -203,8 +215,9 @@ open http://localhost:8080/auth/admin
 Log in with `KC_BOOTSTRAP_ADMIN_USERNAME`/`KC_BOOTSTRAP_ADMIN_PASSWORD` from `.env`, then for each
 reviewer/admin: Users → Add user → set username/email → Credentials tab → set a temporary
 password (`resetPasswordAllowed: true` lets them change it on first login) → Role mapping → assign
-`reviewer` or `admin`. Leave `CONFIGURE_TOTP` in the user's required actions (it's there by
-default) — that's what forces the OTP-enrollment screen on their first login. Hand each person
+`reviewer` or `admin`. `CONFIGURE_TOTP` is no longer added to a new user's required actions (#139),
+so first login goes straight to the password change and then the app; add it by hand on an
+individual account if you want that person on OTP. Hand each person
 their own username and temporary password out of band (password manager, not email/Slack in the
 clear); never reuse one login for two reviewers (`decidedBy` on an approval is only meaningful if
 it names one person — see `CONTEXT.md`'s Clean Approval entry).
@@ -295,10 +308,15 @@ credentials"}` even though the password is right — verified locally this way, 
 Check `attack-detection/brute-force/users/<id>` via kcadm for the authoritative
 `disabled`/`failedLoginNotBefore` state if the token endpoint's response is ambiguous.
 
-**MFA enforcement** — create one throwaway test account (`reviewer` role, so it doesn't pollute
-real `decidedBy` data), and confirm the browser login flow stops at an OTP-enrollment screen
-before reaching the console, on that account's very first login. Delete the throwaway account
-afterward.
+**MFA enforcement** — **no longer applicable (#139).** This check previously required a first
+login to stop at an OTP-enrollment screen. Forced enrollment was dropped for the MVP, so the
+inverse is now what to confirm: create one throwaway test account (`reviewer` role, so it doesn't
+pollute real `decidedBy` data) and check that its first login reaches the console after the
+password change, with no OTP-enrollment step. Delete the throwaway account afterward.
+
+Re-check `MESSAGE_DISPATCH_MODE=sandbox` on the VM at the same time. With MFA off, that setting
+is the only thing standing between a compromised reviewer account and a real customer send — see
+"Keycloak realm" above.
 
 **Unauthenticated access** — confirm a request to a console route with no session (a fresh
 private/incognito window against `https://<domain>/`) redirects to the Keycloak login page rather
