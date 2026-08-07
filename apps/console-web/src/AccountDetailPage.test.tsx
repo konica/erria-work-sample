@@ -9,6 +9,7 @@ const detail = {
     companyName: 'Song Hong Shipping',
     segment: 'Offshore support vessel operator',
     hub: 'Haiphong',
+    icpScore: 82,
     icpBand: 'high',
     relationshipSummary: 'New account · first contact 12 Jul 2026',
     currentTier: 2,
@@ -16,7 +17,15 @@ const detail = {
   },
   vessels: [{ id: 'v1', name: 'MV Song Hong Pioneer', imo: '9123456', flag: 'Vietnam' }],
   contacts: [{ id: 'c1', name: 'Ms. Lan Pham', role: 'Technical Superintendent', email: 'lan@example.com' }],
-  pendingMessage: { id: 'msg_1', body: 'Hi Ms. Pham, ...', edited: false, tierContext: 2, hardRuleFlags: null },
+  pendingMessage: {
+    id: 'msg_1',
+    body: 'Hi Ms. Pham, ...',
+    edited: false,
+    tierContext: 2,
+    hardRuleFlags: null,
+    confidenceLabel: 'mid' as const,
+    verifiabilityNote: 'CRM gap inferred, not confirmed by buyer',
+  },
 };
 
 function mockFetch(overrides: Record<string, unknown> = {}, activeEscalations: unknown[] = []) {
@@ -207,6 +216,32 @@ describe('AccountDetailPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /change tier/i }));
 
     expect(screen.getByText(/change tier manually/i)).toBeInTheDocument();
+  });
+
+  it('renders the trust block and ICP fit meter on the account info tab', async () => {
+    render(<AccountDetailPage accountId="acc_1" onBack={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /account info/i }));
+
+    expect(screen.getByText('Can I trust this trigger?')).toBeInTheDocument();
+    expect(screen.getByText('Moderate')).toBeInTheDocument();
+    expect(screen.getByText('CRM gap inferred, not confirmed by buyer')).toBeInTheDocument();
+    expect(screen.getByText('High fit')).toBeInTheDocument();
+    expect(screen.getByText('82 / 100')).toBeInTheDocument();
+  });
+
+  it('omits the trust block when there is no pending message, but still shows the ICP fit meter', async () => {
+    vi.stubGlobal('fetch', mockFetch({ pendingMessage: null }));
+    render(<AccountDetailPage accountId="acc_1" onBack={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Song Hong Shipping')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /account info/i }));
+
+    expect(screen.queryByText('Can I trust this trigger?')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-od-id="trust-block"]')).not.toBeInTheDocument();
+    expect(screen.getByText('High fit')).toBeInTheDocument();
+    expect(screen.getByText('82 / 100')).toBeInTheDocument();
   });
 
   it('calls onBack when the back button is clicked', async () => {
