@@ -49,9 +49,74 @@ describe('AccountsService', () => {
     const result = await service.getDetail(account.id);
 
     expect(result?.account.companyName).toBe('Song Hong Shipping');
+    expect(result?.account.icpScore).toBe(90);
     expect(result?.vessels).toHaveLength(1);
     expect(result?.pendingMessage?.body).toBe('Hi Ms. Pham, ...');
     expect(result?.pendingMessage?.hardRuleFlags).toBeNull();
+  });
+
+  it('includes the pending message trigger trust signals when the message is trigger-backed', async () => {
+    const account = await testDb.prisma.account.create({
+      data: {
+        companyName: 'Cat Ba Logistics',
+        segment: 'Coastal freight',
+        hub: 'Haiphong',
+        icpScore: 75,
+        icpBand: 'high',
+        relationshipSummary: 'Active',
+        currentTier: 2,
+        tierRationale: 'Active',
+      },
+    });
+    const trigger = await testDb.prisma.trigger.create({
+      data: {
+        accountId: account.id,
+        category: 'compliance_deadline',
+        description: 'Life-raft service window approaching',
+        source: 'class_records',
+        confidenceLabel: 'high',
+        verifiabilityNote: 'Confirmed against class society records',
+        detectedAt: new Date('2026-08-01T00:00:00Z'),
+      },
+    });
+    await testDb.prisma.message.create({
+      data: {
+        accountId: account.id,
+        triggerId: trigger.id,
+        role: 'agent_draft',
+        body: 'Hi, your life-raft service window is approaching...',
+        status: 'pending_review',
+        tierContext: 2,
+      },
+    });
+
+    const service = new AccountsService(testDb.prisma);
+    const result = await service.getDetail(account.id);
+
+    expect(result?.pendingMessage?.confidenceLabel).toBe('high');
+    expect(result?.pendingMessage?.verifiabilityNote).toBe(
+      'Confirmed against class society records',
+    );
+  });
+
+  it('omits the trust fields when there is no pending message', async () => {
+    const account = await testDb.prisma.account.create({
+      data: {
+        companyName: 'Da Nang Shipping',
+        segment: 'Coastal freight',
+        hub: 'Da Nang',
+        icpScore: 40,
+        icpBand: 'low',
+        relationshipSummary: 'No open thread',
+        currentTier: 3,
+        tierRationale: 'No open thread',
+      },
+    });
+
+    const service = new AccountsService(testDb.prisma);
+    const result = await service.getDetail(account.id);
+
+    expect(result?.pendingMessage).toBeNull();
   });
 
   it('surfaces the hold reason on a message the autonomous-send gate held for approval', async () => {
