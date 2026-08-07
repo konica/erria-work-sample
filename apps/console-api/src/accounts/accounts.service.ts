@@ -12,7 +12,12 @@ export class AccountsService {
       include: {
         vessels: true,
         contacts: true,
-        messages: { where: { status: 'pending_review' }, orderBy: { createdAt: 'desc' }, take: 1 },
+        messages: {
+          where: { status: 'pending_review' },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { trigger: true },
+        },
       },
     });
 
@@ -26,6 +31,7 @@ export class AccountsService {
         companyName: account.companyName,
         segment: account.segment,
         hub: account.hub,
+        icpScore: account.icpScore,
         icpBand: account.icpBand,
         relationshipSummary: account.relationshipSummary,
         currentTier: account.currentTier,
@@ -40,6 +46,8 @@ export class AccountsService {
             edited: pendingMessage.edited,
             tierContext: pendingMessage.tierContext,
             hardRuleFlags: (pendingMessage.hardRuleFlags as string[] | null) ?? null,
+            confidenceLabel: pendingMessage.trigger?.confidenceLabel ?? null,
+            verifiabilityNote: pendingMessage.trigger?.verifiabilityNote ?? null,
           }
         : null,
     };

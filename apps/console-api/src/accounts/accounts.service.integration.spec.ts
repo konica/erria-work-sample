@@ -49,9 +49,56 @@ describe('AccountsService', () => {
     const result = await service.getDetail(account.id);
 
     expect(result?.account.companyName).toBe('Song Hong Shipping');
+    expect(result?.account.icpScore).toBe(90);
     expect(result?.vessels).toHaveLength(1);
     expect(result?.pendingMessage?.body).toBe('Hi Ms. Pham, ...');
     expect(result?.pendingMessage?.hardRuleFlags).toBeNull();
+    expect(result?.pendingMessage?.confidenceLabel).toBeNull();
+    expect(result?.pendingMessage?.verifiabilityNote).toBeNull();
+  });
+
+  it('surfaces the pending message trigger\'s confidence label and verifiability note', async () => {
+    const account = await testDb.prisma.account.create({
+      data: {
+        companyName: 'Bien Dong Tankers',
+        segment: 'Product tanker operator',
+        hub: 'Ho Chi Minh City',
+        icpScore: 88,
+        icpBand: 'high',
+        relationshipSummary: 'Active account',
+        currentTier: 2,
+        tierRationale: 'Active — rollout default',
+      },
+    });
+    const trigger = await testDb.prisma.trigger.create({
+      data: {
+        accountId: account.id,
+        category: 'life-raft service window',
+        description: 'Life raft may be approaching its next scheduled service window',
+        source: 'public_data',
+        confidenceLabel: 'mid',
+        verifiabilityNote: 'Partly verifiable — last service date on file, interval is illustrative',
+        detectedAt: new Date(),
+      },
+    });
+    await testDb.prisma.message.create({
+      data: {
+        accountId: account.id,
+        triggerId: trigger.id,
+        role: 'agent_draft',
+        body: 'Hi Ms. Pham, ...',
+        status: 'pending_review',
+        tierContext: 2,
+      },
+    });
+
+    const service = new AccountsService(testDb.prisma);
+    const result = await service.getDetail(account.id);
+
+    expect(result?.pendingMessage?.confidenceLabel).toBe('mid');
+    expect(result?.pendingMessage?.verifiabilityNote).toBe(
+      'Partly verifiable — last service date on file, interval is illustrative',
+    );
   });
 
   it('surfaces the hold reason on a message the autonomous-send gate held for approval', async () => {

@@ -32,7 +32,8 @@ export type IconName =
   | 'flag'
   | 'chevron'
   | 'link'
-  | 'send';
+  | 'send'
+  | 'shield';
 
 const PATHS: Record<IconName, ReactNode> = {
   queue: (
@@ -162,6 +163,8 @@ const PATHS: Record<IconName, ReactNode> = {
       <path d="M22 2 15 22l-4-9-9-4z" />
     </>
   ),
+  // Ported from the mockup's shared icon map (brainstorm/mockup/Erria-outreach-agent-v07/outreach-console.html, const I = {...}).
+  shield: <path d="M12 3 4 6v6c0 4.5 3.2 7.8 8 9 4.8-1.2 8-4.5 8-9V6z" />,
 };
 
 export function Icon({ name, ...svgProps }: { name: IconName } & SVGProps<SVGSVGElement>) {

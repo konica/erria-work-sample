@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from './shell/icons.js';
 import { apiFetch } from './api.js';
+import { IcpMeter, type IcpBand } from './IcpMeter.js';
 
 interface QueueRow {
   accountId: string;
@@ -8,7 +9,7 @@ interface QueueRow {
   vessel: string | null;
   contact: string | null;
   triggerSummary: string | null;
-  icpBand: 'high' | 'med' | 'low';
+  icpBand: IcpBand;
   tier: number;
   tierWhy: string;
   lastActionAt: string;
@@ -19,25 +20,6 @@ interface QueueResponse {
   total: number;
   page: number;
   pageSize: number;
-}
-
-const ICP_LABEL: Record<QueueRow['icpBand'], string> = {
-  high: 'High fit',
-  med: 'Medium',
-  low: 'Low',
-};
-
-function IcpMeter({ band }: { band: QueueRow['icpBand'] }) {
-  return (
-    <span className={`icp ${band}`}>
-      <span className="icp-bars">
-        <i />
-        <i />
-        <i />
-      </span>
-      <span className="icp-label">{ICP_LABEL[band]}</span>
-    </span>
-  );
 }
 
 function rowAccentFor(tier: number) {

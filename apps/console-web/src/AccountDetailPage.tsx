@@ -5,8 +5,17 @@ import { TierHistorySection } from './TierHistorySection.js';
 import { TierBadge } from './TierBadge.js';
 import { EscalationPanel } from './EscalationPanel.js';
 import { ChangeTierPanel } from './ChangeTierPanel.js';
+import { IcpMeter } from './IcpMeter.js';
 
 type Decision = 'approved' | 'rejected' | null;
+
+/** Maps `Trigger.confidenceLabel` (mid/lo shortened to match the mockup's `.dot` classes) to the
+ * badge dot color and the High/Moderate/Low text shown next to it. */
+const CONFIDENCE_META: Record<'high' | 'mid' | 'low', { dot: string; label: string }> = {
+  high: { dot: 'hi', label: 'High' },
+  mid: { dot: 'mid', label: 'Moderate' },
+  low: { dot: 'lo', label: 'Low' },
+};
 
 /** The four tabs from the mockup's `state.detailTab` (`renderDetail()`). Entry always lands on
  * 'work' — the actionable tab — regardless of tier; only its label/icon vary by tier. */
@@ -220,6 +229,48 @@ export function AccountDetailPage({ accountId, onBack }: { accountId: string; on
               </div>
               <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
                 {account.relationshipSummary}
+              </div>
+            </div>
+
+            <div className="doss-card">
+              {pendingMessage?.confidenceLabel && (
+                <div className="trust-block" data-od-id="trust-block">
+                  <div className="trust-head">
+                    <Icon name="shield" />
+                    Can I trust this trigger?
+                  </div>
+                  <div className="doss-row" style={{ borderTop: 0, paddingTop: 2 }}>
+                    <span className="k">Confidence</span>
+                    <span className="v">
+                      <span className="confidence">
+                        <span className={`dot ${CONFIDENCE_META[pendingMessage.confidenceLabel].dot}`} />
+                        {CONFIDENCE_META[pendingMessage.confidenceLabel].label}
+                      </span>
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--muted)', margin: '2px 0 0' }}>
+                    {pendingMessage.verifiabilityNote}
+                  </div>
+                </div>
+              )}
+              <div
+                className="doss-row"
+                style={
+                  pendingMessage?.confidenceLabel
+                    ? { borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 12 }
+                    : { paddingTop: 0 }
+                }
+              >
+                <span className="k">ICP fit score</span>
+                <span className="v">
+                  <IcpMeter band={account.icpBand} />
+                </span>
+              </div>
+              <div className="doss-row" style={{ borderTop: 0, paddingTop: 2 }}>
+                <span className="k">Score</span>
+                <span className="v" style={{ fontFamily: 'var(--mono)' }}>
+                  {account.icpScore} / 100
+                </span>
               </div>
             </div>
 
