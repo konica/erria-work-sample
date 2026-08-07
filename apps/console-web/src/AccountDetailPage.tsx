@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Icon, type IconName } from './shell/icons.js';
 import { api, escalationApi, type AccountDetail, type EscalationSummary } from './api.js';
 import { TierHistorySection } from './TierHistorySection.js';
+import { ResolutionSection } from './ResolutionSection.js';
 import { TierBadge } from './TierBadge.js';
 import { EscalationPanel } from './EscalationPanel.js';
 import { ChangeTierPanel } from './ChangeTierPanel.js';
@@ -428,13 +429,7 @@ export function AccountDetailPage({ accountId, onBack }: { accountId: string; on
 
       {tab === 'resolution' && (
         <div className="detail-panel" data-od-id="detail-resolution">
-          <div className="res-empty" data-od-id="resolution-empty">
-            <Icon name="info" />
-            <span>
-              No closed escalations yet for this account. When an escalation here is resolved, its
-              action, follow-up, outcome, and time-to-resolution are logged here.
-            </span>
-          </div>
+          <ResolutionSection accountId={account.id} />
         </div>
       )}
     </div>
