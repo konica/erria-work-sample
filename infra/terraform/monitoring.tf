@@ -236,6 +236,72 @@ resource "azurerm_monitor_metric_alert" "claude_api_spend" {
   depends_on = [azurerm_role_assignment.vm_publishes_own_metrics]
 }
 
+# --- Nightly backup (issue #60) -----------------------------------------------------------------
+#
+# Two alerts, deliberately watching two different things — the ticket is explicit that "alert on
+# backup failure" and "alert on backup absence" are not the same requirement:
+#
+#   - postgres_backup_failure fires within minutes of a run that ran and went wrong.
+#   - postgres_backup_absent fires when a whole day passes with no *successful* run, which also
+#     covers the case that produces no failure metric at all because nothing executed: cron
+#     stopped, the box was off, the script was renamed.
+#
+# The second is the one that matters more, and the reason a heartbeat exists rather than just
+# error alerting: cron mails failures to a local mailbox nobody reads, and a job that silently
+# stopped firing has no failure to mail in the first place.
+
+resource "azurerm_monitor_metric_alert" "postgres_backup_failure" {
+  name                = "${var.resource_group_name}-postgres-backup-failure-alert"
+  resource_group_name = azurerm_resource_group.review.name
+  scopes              = [azurerm_linux_virtual_machine.review.id]
+  description         = "The nightly pg_dump job reported a failure (issue #60) — deploy/scripts/backup-postgres.sh publishes this metric when a dump is empty or truncated, when pg_restore --list cannot read it, when the upload to Blob Storage fails or lands a different number of bytes than were sent, or when retention could not be applied. ADR-0007 traded away point-in-time restore for self-hosting, so this nightly dump is the entire recovery story: deploy/restore-runbook.md is what it exists for. Investigate the same night; RPO is already 'since last night'."
+  severity            = 1
+  frequency           = "PT5M"
+  window_size         = "PT15M"
+
+  criteria {
+    metric_namespace = "erria/host"
+    metric_name      = "Postgres Backup Failure"
+    # Maximum over the window, not Count: the script publishes a 1 only when something went wrong,
+    # so any data point at all in the window is the alert condition.
+    aggregation            = "Maximum"
+    operator               = "GreaterThanOrEqual"
+    threshold              = 1
+    skip_metric_validation = true
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.ops.id
+  }
+
+  depends_on = [azurerm_role_assignment.vm_publishes_own_metrics]
+}
+
+resource "azurerm_monitor_metric_alert" "postgres_backup_absent" {
+  name                = "${var.resource_group_name}-postgres-backup-absent-alert"
+  resource_group_name = azurerm_resource_group.review.name
+  scopes              = [azurerm_linux_virtual_machine.review.id]
+  description         = "No successful nightly backup in the last 24 hours (issue #60). Same absence-not-error reasoning as the two job-heartbeat alerts above, and the same mechanism: deploy/crontab chains deploy/scripts/report-job-heartbeat.sh with `&&` after deploy/scripts/backup-postgres.sh, so a heartbeat only exists if a dump was taken, verified and uploaded. A run that failed publishes no heartbeat, so this fires for that too — postgres_backup_failure just gets there sooner and says more."
+  severity            = 1
+  frequency           = "PT1H"
+  window_size         = "P1D"
+
+  criteria {
+    metric_namespace       = "erria/host"
+    metric_name            = "Postgres Backup Heartbeat"
+    aggregation            = "Count"
+    operator               = "LessThan"
+    threshold              = 1
+    skip_metric_validation = true
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.ops.id
+  }
+
+  depends_on = [azurerm_role_assignment.vm_publishes_own_metrics]
+}
+
 resource "azurerm_monitor_metric_alert" "tls_expiry" {
   name                = "${var.resource_group_name}-tls-expiry-alert"
   resource_group_name = azurerm_resource_group.review.name

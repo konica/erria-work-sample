@@ -25,8 +25,14 @@ SHELL=/bin/sh
 # loop or a stray large file can fill 64 GiB in minutes, not days. TLS expiry once a day is
 # plenty against a 90-day Let's Encrypt certificate; it needs DEPLOY_DOMAIN from .env, which the
 # other two jobs above don't (docker compose reads .env itself; a plain script does not).
+#
+# `set -a` around the `.` is load-bearing on any line that sources .env for a *script* rather than
+# for `docker compose`: sourcing sets shell variables, and shell variables are not passed to child
+# processes. Without it `report-tls-expiry.sh` sees no DEPLOY_DOMAIN and exits 1 on its own
+# `${DEPLOY_DOMAIN:?}` guard every night — verified with `sh -c '. ./env && ./child.sh'`, which
+# prints an empty value. (`docker compose` is unaffected: it reads .env itself.)
 */5 * * * * /opt/erria/deploy/scripts/report-disk-usage.sh >> /var/log/erria/disk-usage.log 2>&1
-17 3 * * * . /opt/erria/.env && /opt/erria/deploy/scripts/report-tls-expiry.sh >> /var/log/erria/tls-expiry.log 2>&1
+17 3 * * * set -a && . /opt/erria/.env && set +a && /opt/erria/deploy/scripts/report-tls-expiry.sh >> /var/log/erria/tls-expiry.log 2>&1
 
 # Autonomous-send alerting (issue #62) — kill-switch state (so a flip can be alerted on),
 # autonomous send volume (the anomaly tripwire), audit-sample review backlog, and estimated Claude
@@ -35,3 +41,21 @@ SHELL=/bin/sh
 # per tick, not four. See deploy/scripts/report-autonomous-alerting-metrics.sh for why this one
 # needs the worker container (a database query) rather than a plain host script.
 */5 * * * * cd /opt/erria && deploy/scripts/report-autonomous-alerting-metrics.sh >> /var/log/erria/autonomous-alerting-metrics.log 2>&1
+
+# Nightly pg_dump to Azure Blob Storage (issue #60) — the whole of this deployment's recovery
+# story, since ADR-0007 traded away Flexible Server's continuous backup. Restore procedure:
+# deploy/restore-runbook.md.
+#
+# 02:30 UTC, not alongside the 06:00/06:05 jobs above: the dump reads every table and the two
+# worker jobs write, so the quietest hour of the night is worth having them not overlap, and
+# nothing about this deployment is busy at 02:30 in either Denmark or Vietnam.
+#
+# `set -a` for the same reason as the TLS line above — backup-postgres.sh needs POSTGRES_USER /
+# POSTGRES_DB / BACKUP_STORAGE_ACCOUNT exported, not merely set.
+#
+# `&&` before the heartbeat, exactly as the two worker jobs do: the heartbeat means "a dump was
+# taken, verified and uploaded", so a failed run must publish none and let
+# azurerm_monitor_metric_alert.postgres_backup_absent notice the silence. A failed run separately
+# publishes its own "Postgres Backup Failure" metric from inside the script, which is the faster
+# and more specific of the two alerts — see infra/terraform/monitoring.tf.
+30 2 * * * cd /opt/erria && set -a && . ./.env && set +a && deploy/scripts/backup-postgres.sh >> /var/log/erria/backup-postgres.log 2>&1 && deploy/scripts/report-job-heartbeat.sh "Postgres Backup Heartbeat" >> /var/log/erria/backup-postgres-heartbeat.log 2>&1

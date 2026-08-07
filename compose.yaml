@@ -82,4 +82,14 @@ services:
       start_period: 10s
 
 volumes:
+  # `docker compose down -v` DESTROYS this volume and every row in it. There is no confirmation
+  # prompt and no undo: `-v` is one keystroke away from `docker compose down`, which is a command
+  # people run routinely, and `pnpm compose:reset` runs it deliberately.
+  #
+  # In development that is the intended behaviour — re-run `pnpm compose:up` and `pnpm --filter
+  # @erria/db run seed`. On the review deployment it is data loss, recoverable only as far back as
+  # last night's dump (issue #60, deploy/restore-runbook.md), because ADR-0007 traded away
+  # point-in-time restore. Use `docker compose ... down` without `-v` to stop the stack; the
+  # deployment overlay's `caddy-data`/`caddy-config` volumes are lost to the same flag
+  # (deploy/README.md, "Certificate persistence").
   erria-pgdata:
