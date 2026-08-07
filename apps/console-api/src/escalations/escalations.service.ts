@@ -173,6 +173,10 @@ export class EscalationsService {
         outcomeTag: resolution.outcomeTag,
         rule: resolution.escalation.hardTriggerRule,
         resolvedAt: resolution.createdAt.toISOString(),
+        timeToResolution: formatDuration(
+          resolution.escalation.resolvedAt!.getTime() - resolution.escalation.createdAt.getTime(),
+        ),
+        followupSentAt: resolution.followupSentAt?.toISOString() ?? null,
       })),
     };
   }

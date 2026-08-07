@@ -184,6 +184,8 @@ export interface PriorResolution {
   outcomeTag: string;
   rule: string;
   resolvedAt: string;
+  timeToResolution: string;
+  followupSentAt: string | null;
 }
 
 export const escalationApi = {
