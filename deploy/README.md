@@ -199,6 +199,29 @@ Graph sends, and MFA should come back before that switch is flipped, not after.
 `bruteForceProtected` and the lockout policy are unchanged and still apply — they are a separate
 control from MFA.
 
+### Creating accounts in bulk (UAT rounds)
+
+For a round of user-acceptance testing, `deploy/scripts/create-uat-accounts.sh` does what the
+admin-console walkthrough below does, for a list of people, in one command — on the VM, from the
+repo checkout, with `.env` sourced:
+
+```bash
+cd /opt/erria
+set -a && . ./.env && set +a
+printf 'uat-alice alice@example.com reviewer\nuat-bob bob@example.com admin\n' > testers.txt
+deploy/scripts/create-uat-accounts.sh testers.txt      # prints one temporary password per account
+deploy/scripts/create-uat-accounts.sh --delete testers.txt   # when UAT finishes
+```
+
+Each account gets its own randomly generated temporary password, printed to stdout and written
+nowhere else — hand them out of band, exactly as the manual route below requires. Re-running is
+safe: existing usernames are skipped rather than aborting the batch. The script reports what each
+tester's first login will actually involve by reading the realm's own `CONFIGURE_TOTP` setting, so
+it stays honest if that policy changes.
+
+The admin-console walkthrough below remains the manual fallback, and is still the right route for
+creating a single named reviewer/admin rather than a batch of testers.
+
 ### Creating reviewer/admin accounts (admin console, over the SSH tunnel)
 
 The admin console is never reachable over the public hostname — Caddy returns a bare 404 for
