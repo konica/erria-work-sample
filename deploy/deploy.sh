@@ -66,8 +66,41 @@ echo "==> Rendering the Keycloak realm import file for $DEPLOY_DOMAIN"
 # instead (issue #132): Keycloak booted fine and served its default `master` realm, but the
 # `erria` realm was never imported. Re-rendering on every deploy (not just once) keeps this file
 # in sync with the template and DEPLOY_DOMAIN with no separate step to forget.
+realm_file=keycloak/realm-export.deploy.json
+
+# The directory described above is still sitting on every VM that deployed before this render
+# step existed, and a `>` redirect cannot write into one — the deploy aborts here with
+# "Is a directory", *after* migrations have run (issue #137). So the fix for #132 could not
+# apply itself to precisely the VMs showing #132's symptom until this cleanup existed.
+# `rmdir`, not `rm -rf`: the only thing that belongs here is the empty directory Docker
+# creates for a missing bind-mount source. A non-empty one means something this script does
+# not understand is at that path, and failing loudly beats deleting it.
+if [ -d "$realm_file" ]; then
+  echo "==> Removing the empty directory Docker left at $realm_file (issue #137)"
+  rmdir "$realm_file"
+fi
+
+# Rendered to a temp file first so the result can be compared against what is already on disk.
+# `up -d --wait` below only recreates a container when its *compose config* changes, and this
+# bind mount's config string is identical whether the host path is a directory, a stale file or
+# a correct one — so a deploy that fixes the file but reuses the running Keycloak goes green
+# while still serving without the `erria` realm. That is #132's symptom again, now silent.
+rendered="$(mktemp)"
 sed "s|DEPLOY_ORIGIN_PLACEHOLDER|https://${DEPLOY_DOMAIN}|g" \
-  keycloak/realm-export.deploy.json.template > keycloak/realm-export.deploy.json
+  keycloak/realm-export.deploy.json.template > "$rendered"
+
+if [ -f "$realm_file" ] && cmp -s "$rendered" "$realm_file"; then
+  rm -f "$rendered"
+  realm_changed=""
+else
+  mv "$rendered" "$realm_file"
+  realm_changed=1
+fi
+
+if [ -n "$realm_changed" ]; then
+  echo "==> Realm file changed — recreating Keycloak so 'start --import-realm' re-reads it."
+  "${COMPOSE[@]}" up -d --wait --force-recreate keycloak
+fi
 
 echo "==> Starting the new containers."
 "${COMPOSE[@]}" up -d --wait
