@@ -58,8 +58,9 @@ services:
     # (verified via `docker inspect`: ["/opt/keycloak/bin/kc.sh"]) so `command` below runs
     # directly against production Keycloak, not through the dev-only wrapper script.
     entrypoint: !override ['/opt/keycloak/bin/kc.sh']
-    # start, not start-dev (production mode requires KC_HOSTNAME and a real proxy in front of
-    # it — both set below) — --import-realm loads keycloak/realm-export.deploy.json on every
+    # start, not start-dev (production mode requires a resolved hostname and a real proxy in
+    # front of it — see KC_HOSTNAME_STRICT and KC_PROXY_HEADERS below, issue #143) —
+    # --import-realm loads keycloak/realm-export.deploy.json on every
     # boot. Unlike the dev fixture (#75), this one seeds no users: per issue #59, reviewer/admin
     # accounts are created by hand through the admin console (over an SSH tunnel — the admin
     # path is never reachable from the internet) once the realm exists, not fixture-seeded with
@@ -95,7 +96,31 @@ services:
       # Reachable at /auth/* behind Caddy (see deploy/Caddyfile) rather than a second hostname —
       # one DNS record, one certificate. KC_PROXY_HEADERS trusts the X-Forwarded-* headers Caddy
       # sets so Keycloak knows the original request was HTTPS.
-      KC_HOSTNAME: ${DEPLOY_DOMAIN}
+      #
+      # KC_HOSTNAME is deliberately NOT set (issue #143). It used to be `${DEPLOY_DOMAIN}`, which
+      # pinned every URL Keycloak advertises to the public host. Requests arriving through Caddy
+      # were fine — the X-Forwarded-* headers below carry scheme and port. But a request over the
+      # SSH tunnel goes straight to this container with no such headers, so Keycloak fell back to
+      # the pinned hostname plus its own listening port and served the admin console with
+      # `authServerUrl: http://<public-domain>:8080/auth` — an address open on no interface,
+      # since 8080 is loopback-bound. The console died before it could load its i18n bundle,
+      # which is why it rendered raw `somethingWentWrong` keys.
+      #
+      # hostname-strict=false lets Keycloak derive its URLs from each request instead, which
+      # resolves both contexts coherently and on a single origin (verified against
+      # keycloak:26.4 — see the PR): over the tunnel everything is http://localhost:8080/auth;
+      # through Caddy the issuer is https://${DEPLOY_DOMAIN}/auth/realms/erria, unchanged.
+      #
+      # This trusts the forwarded host, which is only safe because nothing untrusted can set it:
+      # this port is bound to loopback (see `ports` above), and deploy/Caddyfile's site block is
+      # host-matched on `{$DEPLOY_DOMAIN}`, so a request with any other Host never matches it and
+      # is never proxied here.
+      #
+      # KC_HOSTNAME_ADMIN was the more surgical-looking option and does not work here: Keycloak
+      # rejects it outright unless `hostname` is a full URL ("hostname must be set to a URL when
+      # hostname-admin is set"), and even once satisfied it leaves the console on localhost while
+      # the login form posts to the public host — a split-origin flow, worse than what we have.
+      KC_HOSTNAME_STRICT: 'false'
       KC_HTTP_RELATIVE_PATH: /auth
       KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: 'true'
@@ -170,11 +195,14 @@ services:
       WORKER_INTERNAL_URL: http://worker:3100
       # NOT the internal http://keycloak:8080 address: JwtVerifierService (#77) builds the
       # JWKS fetch URL from this same value it checks the token's `iss` claim against, and
-      # Keycloak stamps issued tokens with its externally-visible issuer (KC_HOSTNAME +
-      # KC_HTTP_RELATIVE_PATH above) — https://<domain>/auth/realms/erria, never the compose
-      # network name. Using the internal address here would fetch the right keys but reject
-      # every real token on an issuer mismatch. The outbound JWKS fetch this causes is a normal
-      # HTTPS round trip through Caddy to the deployment's own public hostname.
+      # Keycloak stamps issued tokens with its externally-visible issuer — derived per request
+      # from Caddy's X-Forwarded-* headers plus KC_HTTP_RELATIVE_PATH above (issue #143), which
+      # for anything arriving through Caddy is https://<domain>/auth/realms/erria, never the
+      # compose network name. Using the internal address here would fetch the right keys but
+      # reject every real token on an issuer mismatch. The outbound JWKS fetch this causes is a
+      # normal HTTPS round trip through Caddy to the deployment's own public hostname.
+      # A token minted over the SSH tunnel would carry a localhost issuer and be rejected here —
+      # correct: the tunnel exists for Keycloak administration, not for reaching the app.
       KEYCLOAK_ISSUER_URL: https://${DEPLOY_DOMAIN}/auth/realms/erria
       # Unset by default: console-api serves the built console-web SPA itself on this same
       # origin (ADR-0007), so CORS has nothing to open by default here either.
