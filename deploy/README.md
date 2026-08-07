@@ -235,6 +235,14 @@ ssh -L 8080:127.0.0.1:8080 <vm-user>@<vm-host>
 open http://localhost:8080/auth/admin
 ```
 
+This works because `KC_HOSTNAME` is deliberately unset and `KC_HOSTNAME_STRICT=false`, so Keycloak
+derives its URLs from each request rather than pinning them to the public host (#143). Over the
+tunnel that resolves to `http://localhost:8080/auth`; through Caddy the `X-Forwarded-*` headers
+resolve it to `https://<DEPLOY_DOMAIN>/auth`. **If you ever reintroduce a fixed `KC_HOSTNAME`, this
+page breaks** — the console gets served with `authServerUrl: http://<public-domain>:8080/auth`, an
+address open on no interface, and dies before loading its own message bundle, showing raw
+`somethingWentWrong` keys rather than a usable error.
+
 Log in with `KC_BOOTSTRAP_ADMIN_USERNAME`/`KC_BOOTSTRAP_ADMIN_PASSWORD` from `.env`, then for each
 reviewer/admin: Users → Add user → set username/email → Credentials tab → set a temporary
 password (`resetPasswordAllowed: true` lets them change it on first login) → Role mapping → assign
