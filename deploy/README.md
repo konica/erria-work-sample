@@ -104,10 +104,116 @@ had already *removed* something — which ADR-0008 says should never happen in t
 the code that stops needing it, but a rule is not an enforcement mechanism — rolling back the code
 does not restore what the migration dropped. That needs a reverse migration (only possible if
 nothing downstream already depended on the removal) or a restore from the nightly `pg_dump`
-(deployment design §6), and both are slower and more manual than re-pinning a SHA.
+([`restore-runbook.md`](restore-runbook.md), Path B), and both are slower and more manual than
+re-pinning a SHA.
 
 Say this plainly to anyone reading this file expecting rollback to be a general undo button: it
 buys time to investigate a bad deploy. It does not undo a destructive migration.
+
+## Nightly backups (issue #60)
+
+The whole of this deployment's recovery story, because ADR-0007 traded away Flexible Server's
+continuous backup and its ~15-minute RPO. **How to restore is a separate document:
+[`restore-runbook.md`](restore-runbook.md)** — written from a restore that was actually performed,
+with elapsed times, plus the rebuild-from-nothing path.
+
+[`scripts/backup-postgres.sh`](scripts/backup-postgres.sh) runs nightly at 02:30 UTC from
+[`crontab`](crontab). Each run dumps `POSTGRES_DB` with `pg_dump --format=custom`, **verifies the
+dump before uploading it**, PUTs it to Azure Blob Storage as `erria-YYYYmmddTHHMMSSZ.dump`, and
+deletes archives older than `BACKUP_RETENTION_DAYS` (14 by default — see `.env.deploy.example`).
+
+Authentication is the VM's own system-assigned managed identity over IMDS — the same mechanism the
+monitoring scripts use for custom metrics — so **no storage key or SAS token exists anywhere**, in
+`.env` or otherwise. The identity's `Storage Blob Data Contributor` assignment on the container is
+`infra/terraform/storage.tf`'s `azurerm_role_assignment.vm_writes_pg_backups`. The storage account
+itself carries `prevent_destroy`: a routine `terraform destroy` between review cycles fails on it
+rather than taking the dumps with it.
+
+### Why the dump is written to a file and verified, not piped straight to Blob
+
+`pg_dump | upload` is shorter and cannot be checked — the uploader only ever sees a stream that
+ended, so a dump that died three tables in reports success. **A cron job that uploads a 0-byte file
+every night looks exactly like a working backup**, which is the failure this ticket is about. So
+each run makes three checks against the local file before anything is uploaded, and each catches
+something the others cannot:
+
+1. **Size floor** (`BACKUP_MIN_BYTES`, 20 KB) — a 0-byte or near-empty dump.
+2. **`pg_restore --list`** run inside the Postgres container — a truncated or corrupt archive. This
+   is the one that catches a truncation *above* the size floor: an archive cut to 30 KB passes the
+   floor and fails here, verified rather than assumed.
+3. **Required tables present in the TOC** (`accounts`, `contacts`, `triggers`, `messages`) — a
+   technically valid dump of an empty or unmigrated database, which the first two checks cannot see.
+
+After uploading, a `HEAD` reads the blob's `Content-Length` back and compares it with the local
+size; a 201 alone is not treated as proof of what landed.
+[`scripts/backup-postgres.test.mjs`](scripts/backup-postgres.test.mjs) covers all of this against
+the real script with `docker` and `curl` stubbed — `pnpm test:backup`, and in CI.
+
+The local file lives under `/tmp` for the length of one run and is removed on the way out, success
+or failure. Worth knowing only because `/tmp` shares the same 64 GiB disk as Postgres, the Docker
+images and the container logs — the dump is ~40 KB against seeded data today, and the disk-usage
+alert is what would notice if that ever stopped being negligible.
+
+### The two alerts, and why there are two
+
+Failure and absence are different signals, and the ticket is explicit that both are needed:
+
+- **`azurerm_monitor_metric_alert.postgres_backup_failure`** — the script publishes a
+  `Postgres Backup Failure` metric when a run goes wrong. Fires within 15 minutes. Says the job ran
+  and something was wrong with it.
+- **`azurerm_monitor_metric_alert.postgres_backup_absent`** — `crontab` chains
+  `report-job-heartbeat.sh "Postgres Backup Heartbeat"` with `&&`, so a heartbeat exists only after
+  a verified dump was stored. This alerts on **zero heartbeats in 24 hours**, which is the only one
+  of the two that catches the job never running at all — cron removed, box off, script renamed.
+  Nothing executed, so nothing published a failure.
+
+Both go to the `ops` action group (both team members). A `Postgres Backup Size Bytes` metric is also
+published on every successful run — no alert on it, but it is where you look to notice a dump that
+is shrinking while still passing the floor (**Monitor → Metrics → scope to the VM → namespace
+`erria/host`**).
+
+One deliberate asymmetry: a **retention** failure (the container cannot be listed, or a delete is
+refused) raises the failure metric but **exits 0**, so the heartbeat still publishes. The dump is
+already stored and verified at that point, and suppressing the heartbeat would make the absence
+alert claim there is no backup when there is one.
+
+### Verifying it works
+
+On the VM, once `.env` has the `BACKUP_*` values and `terraform apply` has granted the role:
+
+```bash
+cd /opt/erria
+set -a && . ./.env && set +a
+deploy/scripts/backup-postgres.sh          # expect: dumping… / verified dump… / uploaded… / backup OK
+```
+
+Then confirm the blob is really there and really restorable — `restore-runbook.md`'s Path A, which
+downloads it again and restores it into a scratch database. **Do this once by hand before trusting
+the cron entry**; it is the only check that exercises the Blob round trip end to end.
+
+**Simulate a failure deliberately**, since a backup only ever observed succeeding is untested:
+
+```bash
+# A dump of a database that does not exist: pg_dump fails, nothing is uploaded, the failure metric
+# publishes, and both team members get an email within 15 minutes.
+POSTGRES_DB=nosuchdb deploy/scripts/backup-postgres.sh; echo "exit=$?"   # expect non-zero
+
+# The size floor, without touching the real database: force it above any real dump size.
+BACKUP_MIN_BYTES=999999999 deploy/scripts/backup-postgres.sh; echo "exit=$?"   # expect non-zero
+```
+
+**Verify retention** by setting the window short enough to act on dumps that already exist, rather
+than waiting two weeks:
+
+```bash
+BACKUP_RETENTION_DAYS=1 deploy/scripts/backup-postgres.sh
+# expect "deleted expired dump erria-…" lines for yesterday's and older, then restore the value.
+# Re-run the container listing from restore-runbook.md's Path A to confirm what is left.
+```
+
+**Verify the absence alert** the same way the job-heartbeat alerts are verified: comment out the
+02:30 line in the installed crontab (`crontab -e`), wait a day, and confirm
+`postgres_backup_absent` fires and both team members get an email — then restore the line.
 
 ## Verifying Postgres is not reachable from the internet
 
@@ -142,11 +248,14 @@ Record each service's usage against the budget in issue #57 in the PR descriptio
 ## Installing the cron jobs
 
 ```bash
+sudo mkdir -p /var/log/erria && sudo chown "$USER" /var/log/erria   # cron's redirects don't create it
 crontab deploy/crontab
 ```
 
 See [`crontab`](crontab) for the schedule and why the two jobs are staggered rather than
-simultaneous. `followup-cadence` runs its real body (`apps/worker/src/jobs/followup-cadence.ts`);
+simultaneous. Beyond the two worker jobs, the installed crontab also carries the monitoring
+publishes (issues #61/#62) and the nightly backup at 02:30 UTC (issue #60 — see "Nightly backups"
+above). `followup-cadence` runs its real body (`apps/worker/src/jobs/followup-cadence.ts`);
 `audit-sample-maintenance` is still a stub (`apps/worker/src/jobs/run-job.ts`) — a stub run still
 exits 0, so `docker compose -f compose.yaml -f compose.deploy.yaml run --rm worker
 --job=audit-sample-maintenance` succeeding is what "the cron entry ran successfully" means until
@@ -166,7 +275,9 @@ docker compose -f compose.yaml -f compose.deploy.yaml logs caddy | grep -i certi
 ```
 
 `docker compose ... down -v` is destructive here too — same caveat the base `compose.yaml`
-documents for `erria-pgdata` — since it also discards the certificate volumes.
+documents for `erria-pgdata` — since it also discards the certificate volumes. **On this
+deployment `-v` deletes the database**, recoverable only as far back as last night's dump; see
+[`restore-runbook.md`](restore-runbook.md)'s "`docker compose down -v` destroys the database".
 
 ## Keycloak realm
 
@@ -567,7 +678,15 @@ One page, meant to be read top to bottom during an actual incident:
    spend) — see "Autonomous-send alerting" above for what each one watches; `docker compose ...
    logs worker | grep 'tier=autonomous'` isolates the autonomous-tier activity the alert is about
    from human-approved sends in the same log stream.
-7. **Nothing above explains it** — `docker compose -f compose.yaml -f compose.deploy.yaml logs
+7. **Backup alert fired** (`postgres_backup_failure` or `postgres_backup_absent`) —
+   `/var/log/erria/backup-postgres.log` names the failed check directly; the script logs which of
+   the three verifications rejected the dump, or which Blob call failed.
+   `tail /var/log/erria/backup-postgres-heartbeat.log` distinguishes "ran and failed" from "never
+   ran". Re-run it by hand (see "Nightly backups" above) rather than waiting for tomorrow's tick —
+   RPO is already a night, and two nights is worse.
+8. **The data is wrong or gone** — [`restore-runbook.md`](restore-runbook.md). Stop `console-api`
+   and `worker` before anything else so nothing writes over what you are recovering.
+9. **Nothing above explains it** — `docker compose -f compose.yaml -f compose.deploy.yaml logs
    --since 1h` across every service, then work backwards from whichever timestamp lines up with
    when the alert fired.
 

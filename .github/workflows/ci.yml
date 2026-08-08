@@ -43,3 +43,13 @@ jobs:
       - run: pnpm run test
         env:
           ANTHROPIC_API_KEY: sk-test-placeholder-not-a-real-key
+
+      # `pnpm run test` above is `pnpm -r run test`, which only recurses into the workspace
+      # packages (apps/*, packages/*) — the repo's three root-level node:test suites live outside
+      # any workspace and so ran nowhere in CI. Added here with issue #60's backup-script suite,
+      # whose whole point is the acceptance criterion "a zero-byte or truncated dump is treated as
+      # a failure": a check nobody runs does not cover anything. The other two were already
+      # passing and are included rather than left orphaned beside it.
+      - run: pnpm run test:backup
+      - run: pnpm run test:setup
+      - run: pnpm run test:dispatch
