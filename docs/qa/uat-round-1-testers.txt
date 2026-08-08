@@ -1,0 +1,21 @@
+# UAT round 1 — accounts for docs/qa/uat-test-cases.md, in create-uat-accounts.sh's own input
+# format: `username email role`, one per line, role is reviewer|admin (the only two realm roles).
+#
+# Usernames only — no passwords here or anywhere else committed. Run on the review VM per #141:
+#
+#   cd /opt/erria
+#   set -a && . ./.env && set +a
+#   deploy/scripts/create-uat-accounts.sh docs/qa/uat-round-1-testers.txt
+#   deploy/scripts/create-uat-accounts.sh --delete docs/qa/uat-round-1-testers.txt   # after UAT
+#
+# The script prints one freshly generated temporary password per account to stdout only — hand
+# each one out of band (password manager, not email or Slack) to a single named tester. Never
+# reuse one login for two people: `decidedBy` on an approval is only meaningful if it names one
+# person (see the script's own header comment and deploy/README.md).
+#
+# Two accounts cover every case in uat-test-cases.md: TC-LOGIN-2 and the TC-SET-* cases need the
+# admin role for the Settings nav item; everything else only needs reviewer. Add more lines here,
+# same format, if this round assigns more than one tester per role.
+
+uat-qa-reviewer qa-reviewer@example.com reviewer
+uat-qa-admin qa-admin@example.com admin
