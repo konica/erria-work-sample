@@ -9,6 +9,7 @@
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
     "test": "pnpm -r --workspace-concurrency=1 run test",
+    "test:e2e": "pnpm --filter console-e2e run test:e2e",
     "test:setup": "node --test scripts/setup.test.mjs",
     "test:backup": "node --test deploy/scripts/backup-postgres.test.mjs",
     "dispatch": "node scripts/dispatch-tickets.mjs",
